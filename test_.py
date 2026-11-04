@@ -141,7 +141,6 @@ if sidebar_authenticated:
     
     if os.path.exists(EXCEL_FILE):
         try:
-            # Force read latest excel data without cache
             df_ex_report = pd.DataFrame()
             all_sheets = pd.ExcelFile(EXCEL_FILE).sheet_names
             if clean_exhibition_name in all_sheets:
@@ -339,9 +338,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
         
     df_new_rows = pd.DataFrame(rows_to_save)
     
-    # -------------------------------------------------------------
-    # FORCE-REFRESH EXCEL SAVING METHOD
-    # -------------------------------------------------------------
+    # Robust Multi-sheet Excel Saving
     try:
         if os.path.exists(EXCEL_FILE):
             all_sheets_data = pd.read_excel(EXCEL_FILE, sheet_name=None)
@@ -359,9 +356,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     except Exception as e:
         st.error(f"❌ Error saving to Excel: {e}")
 
-    # -------------------------------------------------------------
-    # PDF INVOICE GENERATION
-    # -------------------------------------------------------------
+    # PDF Generation
     doc = SimpleDocTemplate(pdf_filename, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
     elements = []
     styles = getSampleStyleSheet()
