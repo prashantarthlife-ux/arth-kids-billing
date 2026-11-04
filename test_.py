@@ -9,6 +9,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
+from supabase import create_client, Client
 
 # 1. Page Configuration & Professional Corporate Light Styling
 st.set_page_config(page_title="ARTH LIFE - Exhibition Invoice Generator", page_icon="🛍️", layout="wide")
@@ -69,6 +70,14 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Initialize Supabase Client
+try:
+    url = st.secrets["supabase"]["url"]
+    key = st.secrets["supabase"]["key"]
+    supabase: Client = create_client(url, key)
+except Exception as e:
+    supabase = None
+
 # Header Section with Logo & Title Banner
 col_logo1, col_logo2, col_logo3 = st.columns([1, 3, 1])
 with col_logo2:
@@ -83,7 +92,7 @@ with col_logo2:
         </div>
     """, unsafe_allow_html=True)
 
-# 2. ABSOLUTE PATH SETUP FOR GOOGLE DRIVE & LOCAL SYNC
+# 2. PATH SETUP
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 EXCEL_FILE = os.path.join(BASE_DIR, "Master_Exhibition_Sales.xlsx")
 BASE_PDF_FOLDER = os.path.join(BASE_DIR, "Generated_Invoices")
@@ -91,7 +100,7 @@ BASE_PDF_FOLDER = os.path.join(BASE_DIR, "Generated_Invoices")
 if not os.path.exists(BASE_PDF_FOLDER):
     os.makedirs(BASE_PDF_FOLDER)
 
-# Initialize Session States for Credentials and Exhibition
+# Initialize Session States
 if 'admin_user_id' not in st.session_state:
     st.session_state['admin_user_id'] = "admin"
 if 'admin_password' not in st.session_state:
@@ -102,7 +111,7 @@ if 'ex_name_input' not in st.session_state:
 if 'ex_place_input' not in st.session_state:
     st.session_state['ex_place_input'] = "Viman Nagar, Pune"
 
-# 3. Sidebar: Exhibition Setup & Admin Settings / Reports
+# 3. Sidebar: Exhibition Setup & Admin Settings
 st.sidebar.header("🎪 Exhibition Setup & Switcher")
 
 exhibition_name = st.sidebar.text_input("Active Exhibition Name", value=st.session_state['ex_name_input'], key="ex_name_field")
@@ -139,30 +148,36 @@ if sidebar_authenticated:
     st.sidebar.markdown("---")
     st.sidebar.markdown(f"### 📊 Active Report: {exhibition_name}")
     
-    if os.path.exists(EXCEL_FILE):
-        try:
+    # Fetch from Supabase for reports if available, else Excel
+    try:
+        if supabase:
+            res = supabase.table("exhibition_sales").select("*").eq("Exhibition Name", exhibition_name).execute()
+            df_ex_report = pd.DataFrame(res.data)
+        else:
             df_ex_report = pd.DataFrame()
-            all_sheets = pd.ExcelFile(EXCEL_FILE).sheet_names
-            if clean_exhibition_name in all_sheets:
-                df_ex_report = pd.read_excel(EXCEL_FILE, sheet_name=clean_exhibition_name)
+            if os.path.exists(EXCEL_FILE):
+                all_sheets = pd.ExcelFile(EXCEL_FILE).sheet_names
+                if clean_exhibition_name in all_sheets:
+                    df_ex_report = pd.read_excel(EXCEL_FILE, sheet_name=clean_exhibition_name)
                 
-            if not df_ex_report.empty:
-                ex_sales = df_ex_report["Total"].sum()
-                ex_bills = df_ex_report["Bill No"].nunique()
-                st.sidebar.metric(f"💰 {exhibition_name} Sales", f"Rs. {ex_sales}")
-                st.sidebar.metric(f"🧾 {exhibition_name} Bills", ex_bills)
-            else:
-                st.sidebar.info("No sales records for this exhibition yet.")
-                
-            with open(EXCEL_FILE, "rb") as master_f:
-                st.sidebar.download_button(
-                    label=f"📥 Download Master Excel (All Sheets)",
-                    data=master_f,
-                    file_name="Master_Exhibition_Sales.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-        except Exception as e:
-            st.sidebar.error(f"Error: {e}")
+        if not df_ex_report.empty:
+            ex_sales = df_ex_report["Total"].sum()
+            ex_bills = df_ex_report["Bill No"].nunique()
+            st.sidebar.metric(f"💰 {exhibition_name} Sales", f"Rs. {ex_sales}")
+            st.sidebar.metric(f"🧾 {exhibition_name} Bills", ex_bills)
+        else:
+            st.sidebar.info("No sales records for this exhibition yet.")
+    except Exception as e:
+        st.sidebar.error(f"Error loading report: {e}")
+
+    if os.path.exists(EXCEL_FILE):
+        with open(EXCEL_FILE, "rb") as master_f:
+            st.sidebar.download_button(
+                label=f"📥 Download Master Excel",
+                data=master_f,
+                file_name="Master_Exhibition_Sales.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
     st.sidebar.markdown("---")
     st.sidebar.markdown(f"### 📁 Exhibition Folder & ZIP")
@@ -183,15 +198,11 @@ if sidebar_authenticated:
 else:
     st.sidebar.info("🔒 Enter correct Admin ID & Password to unlock reports.")
 
-# 4. Unique Bill ID Generator Across All Sheets
+# 4. Bill ID Generator
 try:
-    if os.path.exists(EXCEL_FILE):
-        all_sheets_df = pd.read_excel(EXCEL_FILE, sheet_name=None)
-        all_bills = []
-        for sh_name, sh_df in all_sheets_df.items():
-            if not sh_df.empty and "Bill No" in sh_df.columns:
-                all_bills.extend(sh_df["Bill No"].dropna().astype(str).unique())
-        
+    if supabase:
+        res = supabase.table("exhibition_sales").select("Bill No").execute()
+        all_bills = list(set([row["Bill No"] for row in res.data if row.get("Bill No")]))
         if all_bills:
             num = len(all_bills) + 1
             candidate_bill = f"ARTH-{num:04d}"
@@ -206,21 +217,20 @@ try:
 except:
     default_bill_no = "ARTH-0001"
 
-# Initialize Session States
 if 'bill_items' not in st.session_state:
     st.session_state['bill_items'] = []
 
 if 'current_bill_no' not in st.session_state:
     st.session_state['current_bill_no'] = default_bill_no
 
-# 6. Product Database
+# 5. Product Database
 product_database = {
     "OOSKU954N167": {"sku": "954", "name": "ARTH LIFE Party Outfit", "size": "5-6 Y", "price": 2799.0},
     "OOSKU955N168": {"sku": "955", "name": "ARTH LIFE Summer Frock", "size": "3-4 Y", "price": 1499.0},
     "OOSKU956N169": {"sku": "956", "name": "ARTH LIFE Ethnic Kurta", "size": "6-7 Y", "price": 1999.0}
 }
 
-# 7. Main Layout: Customer Details & Scanner Gun Input with Validations
+# 6. Main Layout
 col1, col2 = st.columns([1, 1], gap="large")
 
 with col1:
@@ -231,10 +241,8 @@ with col1:
 with col2:
     st.markdown("### 📷 Barcode Scanner Gun / Input Mode")
     st.info("⚡ Click inside the box below and scan the product barcode using your Scanner Gun or type tag ID.")
-    
     scanned_barcode_input = st.text_input("🔍 Scan Barcode Here", placeholder="Scan tag or type barcode...", key="scanner_input", autocomplete="off")
 
-# Validate customer name and mobile number
 is_name_valid = cust_name.replace(" ", "").isalpha()
 is_mobile_valid = cust_mobile.isdigit() and len(cust_mobile) == 10
 
@@ -274,7 +282,7 @@ if scanned_barcode_input:
         if scanned_barcode_input != "":
             st.error(f"⚠️ Barcode '{scanned_barcode_input}' not found in product database!")
 
-# 8. Active Final Bill Summary with Real-Time Manual Quantity Edit & Payment Mode
+# 7. Active Bill Summary
 if st.session_state['bill_items']:
     st.markdown("---")
     st.markdown(f"### 📄 Active Bill Summary — **{st.session_state['current_bill_no']}** ({exhibition_name})")
@@ -338,7 +346,15 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
         
     df_new_rows = pd.DataFrame(rows_to_save)
     
-    # Robust Multi-sheet Excel Saving
+    # 1. SAVE TO SUPABASE CLOUD DATABASE
+    try:
+        if supabase:
+            records = df_new_rows.to_dict(orient="records")
+            supabase.table("exhibition_sales").insert(records).execute()
+    except Exception as e:
+        st.error(f"❌ Supabase Cloud Error: {e}")
+
+    # 2. SAVE TO LOCAL EXCEL FILE (Backup / Sync)
     try:
         if os.path.exists(EXCEL_FILE):
             all_sheets_data = pd.read_excel(EXCEL_FILE, sheet_name=None)
@@ -354,9 +370,9 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
             with pd.ExcelWriter(EXCEL_FILE, engine='openpyxl') as writer:
                 df_new_rows.to_excel(writer, sheet_name=clean_exhibition_name, index=False)
     except Exception as e:
-        st.error(f"❌ Error saving to Excel: {e}")
+        print("Excel backup note:", e)
 
-    # PDF Generation
+    # 3. PDF GENERATION
     doc = SimpleDocTemplate(pdf_filename, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
     elements = []
     styles = getSampleStyleSheet()
@@ -455,20 +471,14 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     
     doc.build(elements)
     
-    # -------------------------------------------------------------
-    # AUTOMATIC FOLDER & EXCEL OPENING (For Local Windows/Mac execution)
-    # -------------------------------------------------------------
+    # Auto open local folder if run locally
     try:
-        if os.name == 'nt':  # Windows
-            os.startfile(os.path.abspath(EXCEL_FILE))
+        if os.name == 'nt':
             os.startfile(os.path.abspath(exhibition_folder))
-        elif os.name == 'posix':  # Mac / Linux
-            os.system(f"open '{os.path.abspath(EXCEL_FILE)}'")
-            os.system(f"open '{os.path.abspath(exhibition_folder)}'")
-    except Exception as ex:
-        print("Folder auto-open note:", ex)
+    except:
+        pass
 
-    st.success("🎉 Invoice saved, Master Excel updated, and files opened automatically!")
+    st.success("🎉 Bill saved to Supabase Cloud & PDF generated successfully!")
     st.session_state['pdf_ready'] = pdf_filename
     st.rerun()
 
@@ -515,52 +525,53 @@ if st.button("🔄 Complete & Start Next Bill"):
     if 'pdf_ready' in st.session_state:
         del st.session_state['pdf_ready']
     try:
-        all_sheets_df = pd.read_excel(EXCEL_FILE, sheet_name=None)
-        all_bills = []
-        for sh_name, sh_df in all_sheets_df.items():
-            if not sh_df.empty and "Bill No" in sh_df.columns:
-                all_bills.extend(sh_df["Bill No"].dropna().astype(str).unique())
-        num = len(all_bills) + 1
-        next_bill = f"ARTH-{num:04d}"
-        while next_bill in all_bills:
-            num += 1
+        if supabase:
+            res = supabase.table("exhibition_sales").select("Bill No").execute()
+            all_bills = list(set([row["Bill No"] for row in res.data if row.get("Bill No")]))
+            num = len(all_bills) + 1
             next_bill = f"ARTH-{num:04d}"
-        st.session_state['current_bill_no'] = next_bill
+            while next_bill in all_bills:
+                num += 1
+                next_bill = f"ARTH-{num:04d}"
+            st.session_state['current_bill_no'] = next_bill
+        else:
+            st.session_state['current_bill_no'] = "ARTH-0001"
     except:
         st.session_state['current_bill_no'] = "ARTH-0001"
     st.rerun()
 
-# 9. SEPARATE EXHIBITION-WISE LIVE DASHBOARDS AT THE BOTTOM
+# 8. LIVE DASHBOARDS FROM SUPABASE
 st.markdown("---")
-st.markdown("## 📊 Exhibition-wise Live Dashboards (Today's Analytics)")
+st.markdown("## 📊 Exhibition-wise Live Dashboards (Analytics)")
 
-if os.path.exists(EXCEL_FILE):
-    try:
-        all_sheets_data = pd.read_excel(EXCEL_FILE, sheet_name=None)
-        today_date_val = datetime.date.today()
+try:
+    if supabase:
+        res = supabase.table("exhibition_sales").select("*").execute()
+        df_all_sales = pd.DataFrame(res.data)
         
-        active_exhibitions_found = False
-        for sh_name, sh_df in all_sheets_data.items():
-            if not sh_df.empty and "Timestamp" in sh_df.columns:
-                sh_df['ParsedDate'] = pd.to_datetime(sh_df['Timestamp']).dt.date
-                df_today_ex = sh_df[sh_df['ParsedDate'] == today_date_val]
+        if not df_all_sales.empty and "Timestamp" in df_all_sales.columns:
+            df_all_sales['ParsedDate'] = pd.to_datetime(df_all_sales['Timestamp']).dt.date
+            today_date_val = datetime.date.today()
+            df_today = df_all_sales[df_all_sales['ParsedDate'] == today_date_val]
+            
+            exhibitions = df_all_sales['Exhibition Name'].unique()
+            for ex in exhibitions:
+                df_ex = df_all_sales[df_all_sales['Exhibition Name'] == ex]
+                df_ex_today = df_today[df_today['Exhibition Name'] == ex] if not df_today.empty else pd.DataFrame()
                 
-                if not df_today_ex.empty:
-                    active_exhibitions_found = True
-                    ex_rev = df_today_ex['Total'].sum()
-                    ex_ord = df_today_ex['Bill No'].nunique()
-                    tot_ex_sales = sh_df['Total'].sum()
-                    
-                    st.markdown(f"### 🎪 Exhibition: **{sh_name}**")
-                    d_col1, d_col2, d_col3 = st.columns(3)
-                    d_col1.metric(f"📦 Today's Orders ({sh_name})", ex_ord)
-                    d_col2.metric(f"💵 Today's Revenue ({sh_name})", f"Rs. {ex_rev}")
-                    d_col3.metric(f"🛍️ Cumulative Sales ({sh_name})", f"Rs. {tot_ex_sales}")
-                    st.markdown("---")
-                    
-        if not active_exhibitions_found:
-            st.info("ℹ️ No active sales records found for today across any exhibitions yet.")
-    except Exception as e:
-        st.error(f"Error loading exhibition dashboards: {e}")
-else:
-    st.info("ℹ️ Master Excel file not created yet. Save your first bill to view exhibition dashboards here.")
+                ex_rev = df_ex_today['Total'].sum() if not df_ex_today.empty else 0
+                ex_ord = df_ex_today['Bill No'].nunique() if not df_ex_today.empty else 0
+                tot_ex_sales = df_ex['Total'].sum()
+                
+                st.markdown(f"### 🎪 Exhibition: **{ex}**")
+                d_col1, d_col2, d_col3 = st.columns(3)
+                d_col1.metric(f"📦 Today's Orders", ex_ord)
+                d_col2.metric(f"💵 Today's Revenue", f"Rs. {ex_rev}")
+                d_col3.metric(f"🛍️ Cumulative Sales", f"Rs. {tot_ex_sales}")
+                st.markdown("---")
+        else:
+            st.info("ℹ️ No records found in Supabase database yet.")
+    else:
+        st.info("ℹ️ Supabase not connected.")
+except Exception as e:
+    st.error(f"Error loading dashboards: {e}")
