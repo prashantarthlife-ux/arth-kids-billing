@@ -70,7 +70,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Initialize Supabase Client
+# Initialize Supabase Client securely
 try:
     url = st.secrets["supabase"]["url"]
     key = st.secrets["supabase"]["key"]
@@ -148,11 +148,10 @@ if sidebar_authenticated:
     st.sidebar.markdown("---")
     st.sidebar.markdown(f"### 📊 Active Report: {exhibition_name}")
     
-    # Fetch from Supabase for reports if available, else Excel
     try:
         if supabase:
             res = supabase.table("exhibition_sales").select("*").eq("Exhibition Name", exhibition_name).execute()
-            df_ex_report = pd.DataFrame(res.data)
+            df_ex_report = pd.DataFrame(res.data) if res.data else pd.DataFrame()
         else:
             df_ex_report = pd.DataFrame()
             if os.path.exists(EXCEL_FILE):
@@ -160,9 +159,9 @@ if sidebar_authenticated:
                 if clean_exhibition_name in all_sheets:
                     df_ex_report = pd.read_excel(EXCEL_FILE, sheet_name=clean_exhibition_name)
                 
-        if not df_ex_report.empty:
+        if not df_ex_report.empty and "Total" in df_ex_report.columns:
             ex_sales = df_ex_report["Total"].sum()
-            ex_bills = df_ex_report["Bill No"].nunique()
+            ex_bills = df_ex_report["Bill No"].nunique() if "Bill No" in df_ex_report.columns else 0
             st.sidebar.metric(f"💰 {exhibition_name} Sales", f"Rs. {ex_sales}")
             st.sidebar.metric(f"🧾 {exhibition_name} Bills", ex_bills)
         else:
@@ -202,7 +201,7 @@ else:
 try:
     if supabase:
         res = supabase.table("exhibition_sales").select("Bill No").execute()
-        all_bills = list(set([row["Bill No"] for row in res.data if row.get("Bill No")]))
+        all_bills = list(set([row["Bill No"] for row in res.data if row.get("Bill No")])) if res.data else []
         if all_bills:
             num = len(all_bills) + 1
             candidate_bill = f"ARTH-{num:04d}"
@@ -471,7 +470,6 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     
     doc.build(elements)
     
-    # Auto open local folder if run locally
     try:
         if os.name == 'nt':
             os.startfile(os.path.abspath(exhibition_folder))
@@ -527,7 +525,7 @@ if st.button("🔄 Complete & Start Next Bill"):
     try:
         if supabase:
             res = supabase.table("exhibition_sales").select("Bill No").execute()
-            all_bills = list(set([row["Bill No"] for row in res.data if row.get("Bill No")]))
+            all_bills = list(set([row["Bill No"] for row in res.data if row.get("Bill No")])) if res.data else []
             num = len(all_bills) + 1
             next_bill = f"ARTH-{num:04d}"
             while next_bill in all_bills:
@@ -540,38 +538,42 @@ if st.button("🔄 Complete & Start Next Bill"):
         st.session_state['current_bill_no'] = "ARTH-0001"
     st.rerun()
 
-# 8. LIVE DASHBOARDS FROM SUPABASE
+# 8. LIVE DASHBOARDS FROM SUPABASE (Safe Handling)
 st.markdown("---")
 st.markdown("## 📊 Exhibition-wise Live Dashboards (Analytics)")
 
 try:
     if supabase:
         res = supabase.table("exhibition_sales").select("*").execute()
-        df_all_sales = pd.DataFrame(res.data)
         
-        if not df_all_sales.empty and "Timestamp" in df_all_sales.columns:
-            df_all_sales['ParsedDate'] = pd.to_datetime(df_all_sales['Timestamp']).dt.date
-            today_date_val = datetime.date.today()
-            df_today = df_all_sales[df_all_sales['ParsedDate'] == today_date_val]
+        if res.data and len(res.data) > 0:
+            df_all_sales = pd.DataFrame(res.data)
             
-            exhibitions = df_all_sales['Exhibition Name'].unique()
-            for ex in exhibitions:
-                df_ex = df_all_sales[df_all_sales['Exhibition Name'] == ex]
-                df_ex_today = df_today[df_today['Exhibition Name'] == ex] if not df_today.empty else pd.DataFrame()
+            if not df_all_sales.empty and "Timestamp" in df_all_sales.columns:
+                df_all_sales['ParsedDate'] = pd.to_datetime(df_all_sales['Timestamp'], errors='coerce').dt.date
+                today_date_val = datetime.date.today()
+                df_today = df_all_sales[df_all_sales['ParsedDate'] == today_date_val]
                 
-                ex_rev = df_ex_today['Total'].sum() if not df_ex_today.empty else 0
-                ex_ord = df_ex_today['Bill No'].nunique() if not df_ex_today.empty else 0
-                tot_ex_sales = df_ex['Total'].sum()
-                
-                st.markdown(f"### 🎪 Exhibition: **{ex}**")
-                d_col1, d_col2, d_col3 = st.columns(3)
-                d_col1.metric(f"📦 Today's Orders", ex_ord)
-                d_col2.metric(f"💵 Today's Revenue", f"Rs. {ex_rev}")
-                d_col3.metric(f"🛍️ Cumulative Sales", f"Rs. {tot_ex_sales}")
-                st.markdown("---")
+                exhibitions = df_all_sales['Exhibition Name'].unique()
+                for ex in exhibitions:
+                    df_ex = df_all_sales[df_all_sales['Exhibition Name'] == ex]
+                    df_ex_today = df_today[df_today['Exhibition Name'] == ex] if not df_today.empty else pd.DataFrame()
+                    
+                    ex_rev = df_ex_today['Total'].sum() if not df_ex_today.empty else 0
+                    ex_ord = df_ex_today['Bill No'].nunique() if not df_ex_today.empty else 0
+                    tot_ex_sales = df_ex['Total'].sum()
+                    
+                    st.markdown(f"### 🎪 Exhibition: **{ex}**")
+                    d_col1, d_col2, d_col3 = st.columns(3)
+                    d_col1.metric(f"📦 Today's Orders", ex_ord)
+                    d_col2.metric(f"💵 Today's Revenue", f"Rs. {ex_rev}")
+                    d_col3.metric(f"🛍️ Cumulative Sales", f"Rs. {tot_ex_sales}")
+                    st.markdown("---")
+            else:
+                st.info("ℹ️ Supabase table connected, but no records found yet. Save your first bill to see analytics!")
         else:
-            st.info("ℹ️ No records found in Supabase database yet.")
+            st.info("ℹ️ Supabase table is empty right now. Create your first bill above to initialize live dashboards!")
     else:
         st.info("ℹ️ Supabase not connected.")
 except Exception as e:
-    st.error(f"Error loading dashboards: {e}")
+    st.info("ℹ️ Complete your first bill transaction to initialize the dashboard analytics.")
