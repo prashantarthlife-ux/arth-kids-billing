@@ -2,9 +2,4 @@ streamlit
 pandas
 openpyxl
 reportlab
-opencv-python
-
-
-
-
-
+supabase
