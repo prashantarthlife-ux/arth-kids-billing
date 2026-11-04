@@ -455,7 +455,20 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     
     doc.build(elements)
     
-    st.success("🎉 Invoice saved, PDF generated, and Master Excel updated successfully!")
+    # -------------------------------------------------------------
+    # AUTOMATIC FOLDER & EXCEL OPENING (For Local Windows/Mac execution)
+    # -------------------------------------------------------------
+    try:
+        if os.name == 'nt':  # Windows
+            os.startfile(os.path.abspath(EXCEL_FILE))
+            os.startfile(os.path.abspath(exhibition_folder))
+        elif os.name == 'posix':  # Mac / Linux
+            os.system(f"open '{os.path.abspath(EXCEL_FILE)}'")
+            os.system(f"open '{os.path.abspath(exhibition_folder)}'")
+    except Exception as ex:
+        print("Folder auto-open note:", ex)
+
+    st.success("🎉 Invoice saved, Master Excel updated, and files opened automatically!")
     st.session_state['pdf_ready'] = pdf_filename
     st.rerun()
 
