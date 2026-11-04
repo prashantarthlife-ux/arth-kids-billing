@@ -4,6 +4,7 @@ import os
 import datetime
 import urllib.parse
 import shutil
+import base64
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -457,13 +458,23 @@ if not (is_name_valid and is_mobile_valid):
 if 'pdf_ready' in st.session_state and os.path.exists(st.session_state['pdf_ready']):
     st.markdown("### 📥 Download, Print & Share Invoice")
     
-    # Automatically trigger browser print/preview using HTML embedded script
     with open(st.session_state['pdf_ready'], "rb") as pdf_file:
         pdf_bytes = pdf_file.read()
-    import base64
+    
     b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
-    pdf_display = f'<iframe src="data:application/pdf;base64,{b64_pdf}" width="100%" height="500px" type="application/pdf"></iframe>'
-    st.markdown(pdf_display, unsafe_allow_html=True)
+    
+    # Safe JavaScript download & Print trigger button without browser blocking issues
+    pdf_download_link = f'''
+        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+            <a href="data:application/pdf;base64,{b64_pdf}" download="{os.path.basename(st.session_state['pdf_ready'])}" style="flex: 1; background-color: #0077B6; color: white; padding: 12px 20px; text-align: center; text-decoration: none; font-weight: bold; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,119,182,0.3);">
+                📥 Click Here to Download PDF
+            </a>
+            <button onclick="var win = window.open('data:application/pdf;base64,{b64_pdf}'); setTimeout(function(){win.print();}, 1000);" style="flex: 1; background-color: #2e7d32; color: white; padding: 12px 20px; border: none; font-weight: bold; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 10px rgba(46,125,50,0.3);">
+                🖨️ Click Here to Print Bill Directly
+            </button>
+        </div>
+    '''
+    st.markdown(pdf_download_link, unsafe_allow_html=True)
 
     d_col1, d_col2 = st.columns(2)
     with d_col1:
