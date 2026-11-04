@@ -307,7 +307,7 @@ if st.session_state['bill_items']:
     
     st.markdown(f"### 💰 **Grand Total: Rs. {grand_total}**")
 
-# PAYMENT METHOD & SAVE BUTTON (Visible Cleanly)
+# PAYMENT METHOD & SAVE BUTTON
 st.markdown("---")
 st.markdown("### 💳 Payment & Finalize Invoice")
 payment_status = st.selectbox("Select Payment Status / Mode", ["Cash", "UPI / GPay / PhonePe", "Credit/Debit Card"], key="payment_mode_select")
@@ -455,17 +455,25 @@ if not (is_name_valid and is_mobile_valid):
     st.warning("⚠️ Please enter a valid Customer Name (alphabets only) and a 10-digit Mobile Number to enable bill generation.")
 
 if 'pdf_ready' in st.session_state and os.path.exists(st.session_state['pdf_ready']):
-    st.markdown("### 📥 Download or Share Invoice")
+    st.markdown("### 📥 Download, Print & Share Invoice")
+    
+    # Automatically trigger browser print/preview using HTML embedded script
+    with open(st.session_state['pdf_ready'], "rb") as pdf_file:
+        pdf_bytes = pdf_file.read()
+    import base64
+    b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
+    pdf_display = f'<iframe src="data:application/pdf;base64,{b64_pdf}" width="100%" height="500px" type="application/pdf"></iframe>'
+    st.markdown(pdf_display, unsafe_allow_html=True)
+
     d_col1, d_col2 = st.columns(2)
     with d_col1:
-        with open(st.session_state['pdf_ready'], "rb") as pdf_file:
-            st.download_button(
-                label="📥 Download Professional Invoice PDF", 
-                data=pdf_file, 
-                file_name=os.path.basename(st.session_state['pdf_ready']), 
-                mime="application/pdf", 
-                key="dl_current_pdf"
-            )
+        st.download_button(
+            label="📥 Download Professional Invoice PDF", 
+            data=pdf_bytes, 
+            file_name=os.path.basename(st.session_state['pdf_ready']), 
+            mime="application/pdf", 
+            key="dl_current_pdf"
+        )
     with d_col2:
         msg = f"Hello {cust_name}, Thank you for shopping at {exhibition_name}! Your Bill No: {st.session_state['current_bill_no']}, Grand Total: Rs. {grand_total}."
         encoded_msg = urllib.parse.quote(msg)
