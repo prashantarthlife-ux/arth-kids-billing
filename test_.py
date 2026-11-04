@@ -141,11 +141,11 @@ if sidebar_authenticated:
     
     if os.path.exists(EXCEL_FILE):
         try:
+            # Force read latest excel data without cache
+            df_ex_report = pd.DataFrame()
             all_sheets = pd.ExcelFile(EXCEL_FILE).sheet_names
             if clean_exhibition_name in all_sheets:
                 df_ex_report = pd.read_excel(EXCEL_FILE, sheet_name=clean_exhibition_name)
-            else:
-                df_ex_report = pd.DataFrame()
                 
             if not df_ex_report.empty:
                 ex_sales = df_ex_report["Total"].sum()
@@ -339,20 +339,28 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
         
     df_new_rows = pd.DataFrame(rows_to_save)
     
-    if os.path.exists(EXCEL_FILE):
-        with pd.ExcelWriter(EXCEL_FILE, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
-            all_existing = pd.read_excel(EXCEL_FILE, sheet_name=None)
-            if clean_exhibition_name in all_existing:
-                updated_sheet_df = pd.concat([all_existing[clean_exhibition_name], df_new_rows], ignore_index=True)
-            else:
-                updated_sheet_df = df_new_rows
-            updated_sheet_df.to_excel(writer, sheet_name=clean_exhibition_name, index=False)
-    else:
-        with pd.ExcelWriter(EXCEL_FILE, engine='openpyxl') as writer:
-            df_new_rows.to_excel(writer, sheet_name=clean_exhibition_name, index=False)
-    
     # -------------------------------------------------------------
-    # PREVIOUS CLEAN INVOICE FORMAT WITH UPDATED ARTH LIFE INFO & ZERO TAXES
+    # FORCE-REFRESH EXCEL SAVING METHOD
+    # -------------------------------------------------------------
+    try:
+        if os.path.exists(EXCEL_FILE):
+            all_sheets_data = pd.read_excel(EXCEL_FILE, sheet_name=None)
+            if clean_exhibition_name in all_sheets_data:
+                all_sheets_data[clean_exhibition_name] = pd.concat([all_sheets_data[clean_exhibition_name], df_new_rows], ignore_index=True)
+            else:
+                all_sheets_data[clean_exhibition_name] = df_new_rows
+                
+            with pd.ExcelWriter(EXCEL_FILE, engine='openpyxl') as writer:
+                for sh_name, sh_df in all_sheets_data.items():
+                    sh_df.to_excel(writer, sheet_name=sh_name, index=False)
+        else:
+            with pd.ExcelWriter(EXCEL_FILE, engine='openpyxl') as writer:
+                df_new_rows.to_excel(writer, sheet_name=clean_exhibition_name, index=False)
+    except Exception as e:
+        st.error(f"❌ Error saving to Excel: {e}")
+
+    # -------------------------------------------------------------
+    # PDF INVOICE GENERATION
     # -------------------------------------------------------------
     doc = SimpleDocTemplate(pdf_filename, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
     elements = []
@@ -451,8 +459,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     elements.append(footer_table)
     
     doc.build(elements)
-    # -------------------------------------------------------------
-
+    
     st.success("🎉 Invoice saved, PDF generated, and Master Excel updated successfully!")
     st.session_state['pdf_ready'] = pdf_filename
     st.rerun()
