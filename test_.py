@@ -9,72 +9,83 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
-# 1. Page Configuration & Custom Attractive Streamlit Styling
+# 1. Page Configuration & Professional Corporate Light Styling
 st.set_page_config(page_title="ARTH LIFE - Exhibition Invoice Generator", page_icon="🛍️", layout="wide")
 
 st.markdown("""
     <style>
+    /* Clean Professional Light Background */
     .stApp {
-        background-color: #0E1117;
-        color: #FAFAFA;
+        background-color: #F4F7F6;
+        color: #2C3E50;
     }
+    
+    /* Professional Header Banner */
     .main-banner {
-        background: linear-gradient(90deg, #1f4068 0%, #162447 100%);
-        padding: 25px;
-        border-radius: 12px;
+        background: linear-gradient(135deg, #0077B6 0%, #00B4D8 100%);
+        padding: 20px;
+        border-radius: 10px;
         text-align: center;
-        border: 1px solid #e43f5a;
-        box-shadow: 0 4px 20px rgba(228, 63, 90, 0.2);
+        box-shadow: 0 4px 15px rgba(0, 119, 182, 0.2);
         margin-bottom: 25px;
     }
     .banner-title {
-        font-size: 32px;
-        font-weight: 800;
+        font-size: 30px;
+        font-weight: 700;
         color: #FFFFFF;
-        letter-spacing: 1px;
+        letter-spacing: 0.5px;
         margin: 0;
     }
+    
+    /* Input Fields Styling */
     .stTextInput>div>div>input {
-        background-color: #1a1a24;
-        color: white;
+        background-color: #FFFFFF;
+        color: #2C3E50;
         border-radius: 8px;
-        border: 1px solid #303841;
+        border: 1px solid #CBD5E1;
     }
+    
+    /* Professional Primary Button */
     .stButton>button {
-        background: linear-gradient(135deg, #e43f5a 0%, #ff6584 100%) !important;
+        background: linear-gradient(135deg, #0077B6 0%, #00B4D8 100%) !important;
         color: white !important;
         border: none !important;
         border-radius: 8px !important;
         font-weight: bold !important;
         height: 48px !important;
-        box-shadow: 0 4px 12px rgba(228, 63, 90, 0.4);
+        box-shadow: 0 4px 10px rgba(0, 119, 182, 0.3);
         transition: all 0.3s ease;
     }
     .stButton>button:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 18px rgba(228, 63, 90, 0.6);
+        box-shadow: 0 6px 15px rgba(0, 119, 182, 0.4);
     }
+    
+    /* Sidebar Styling */
     [data-testid="stSidebar"] {
-        background-color: #161b22;
-        border-right: 1px solid #303841;
+        background-color: #FFFFFF;
+        border-right: 1px solid #E2E8F0;
     }
+    
+    /* Metric Cards */
     div[data-testid="stMetric"] {
-        background-color: #161b22;
+        background-color: #FFFFFF;
         padding: 15px;
         border-radius: 10px;
-        border: 1px solid #303841;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        border: 1px solid #E2E8F0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        border-left: 5px solid #0077B6;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# Header Section with Logo & Attractive Title Banner
+# Header Section with Logo & Title Banner
 col_logo1, col_logo2, col_logo3 = st.columns([1, 3, 1])
 with col_logo2:
     if os.path.exists("logo.png"):
         c_img1, c_img2, c_img3 = st.columns([1, 1, 1])
         with c_img2:
-            st.image("logo.png", width=120)
+            st.image("logo.png", width=110)
             
     st.markdown("""
         <div class="main-banner">
@@ -274,7 +285,7 @@ if scanned_barcode_input:
         if scanned_barcode_input != "":
             st.error(f"⚠️ Barcode '{scanned_barcode_input}' not found in product database!")
 
-# 8. Active Final Bill Summary with Real-Time Manual Quantity Edit & Payment Method Option
+# 8. Active Final Bill Summary with Real-Time Manual Quantity Edit & Payment Mode
 if st.session_state['bill_items']:
     st.markdown("---")
     st.markdown(f"### 📄 Active Bill Summary — **{st.session_state['current_bill_no']}** ({exhibition_name})")
@@ -307,7 +318,7 @@ if st.session_state['bill_items']:
     
     st.markdown(f"### 💰 **Grand Total: Rs. {grand_total}**")
     
-    # Payment Method Selection Option added here
+    # Payment Method Selection (Prominently Placed)
     payment_status = st.selectbox("💳 Select Payment Status / Mode", ["Cash", "UPI / GPay / PhonePe", "Credit/Debit Card"])
     
     st.markdown("### 🚀 Finalize & Generate Invoice PDF")
@@ -354,8 +365,8 @@ if st.session_state['bill_items']:
         elements = []
         styles = getSampleStyleSheet()
         
-        inv_title_style = ParagraphStyle('InvTitle', fontName='Helvetica-Bold', fontSize=24, textColor=colors.HexColor('#2C2C2C'), alignment=0)
-        company_style = ParagraphStyle('CompStyle', fontName='Helvetica-Bold', fontSize=12, textColor=colors.HexColor('#e43f5a'), alignment=2)
+        inv_title_style = ParagraphStyle('InvTitle', fontName='Helvetica-Bold', fontSize=24, textColor=colors.HexColor('#2C3E50'), alignment=0)
+        company_style = ParagraphStyle('CompStyle', fontName='Helvetica-Bold', fontSize=12, textColor=colors.HexColor('#0077B6'), alignment=2)
         sub_company_style = ParagraphStyle('SubCompStyle', fontName='Helvetica', fontSize=9, textColor=colors.HexColor('#555555'), alignment=2)
         
         header_data = [
@@ -378,17 +389,17 @@ if st.session_state['bill_items']:
         ]
         bill_to_table = Table(bill_to_data, colWidths=[250, 260])
         bill_to_table.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#FAFAFA')),
-            ('BOX', (0,0), (-1,-1), 0.5, colors.lightgrey),
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F8FAFC')),
+            ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
             ('PADDING', (0,0), (-1,-1), 10),
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ]))
         elements.append(bill_to_table)
         elements.append(Spacer(1, 20))
         
-        th_style = ParagraphStyle('TH', fontName='Helvetica-Bold', fontSize=10, textColor=colors.HexColor('#2C2C2C'))
-        th_center = ParagraphStyle('THC', fontName='Helvetica-Bold', fontSize=10, textColor=colors.HexColor('#2C2C2C'), alignment=1)
-        th_right = ParagraphStyle('THR', fontName='Helvetica-Bold', fontSize=10, textColor=colors.HexColor('#2C2C2C'), alignment=2)
+        th_style = ParagraphStyle('TH', fontName='Helvetica-Bold', fontSize=10, textColor=colors.HexColor('#2C3E50'))
+        th_center = ParagraphStyle('THC', fontName='Helvetica-Bold', fontSize=10, textColor=colors.HexColor('#2C3E50'), alignment=1)
+        th_right = ParagraphStyle('THR', fontName='Helvetica-Bold', fontSize=10, textColor=colors.HexColor('#2C3E50'), alignment=2)
         
         table_data = [[
             Paragraph("ITEM DESCRIPTION", th_style), 
@@ -410,8 +421,8 @@ if st.session_state['bill_items']:
                 Paragraph(f"{row['Total']:.2f}", td_right)
             ])
             
-        tot_label = ParagraphStyle('TotL', fontName='Helvetica-Bold', fontSize=11, textColor=colors.HexColor('#2C2C2C'), alignment=2)
-        tot_val = ParagraphStyle('TotV', fontName='Helvetica-Bold', fontSize=11, textColor=colors.HexColor('#e43f5a'), alignment=2)
+        tot_label = ParagraphStyle('TotL', fontName='Helvetica-Bold', fontSize=11, textColor=colors.HexColor('#2C3E50'), alignment=2)
+        tot_val = ParagraphStyle('TotV', fontName='Helvetica-Bold', fontSize=11, textColor=colors.HexColor('#0077B6'), alignment=2)
         
         table_data.append([
             Paragraph("", td_style),
@@ -422,14 +433,14 @@ if st.session_state['bill_items']:
         
         item_table = Table(table_data, colWidths=[230, 90, 60, 130])
         item_table.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#ffccd5')),
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#CAF0F8')),
             ('ALIGN', (0,0), (-1,-1), 'LEFT'),
             ('BOTTOMPADDING', (0,0), (-1,0), 8),
             ('TOPPADDING', (0,0), (-1,0), 8),
-            ('ROWBACKGROUNDS', (0,1), (-1,-2), [colors.white, colors.HexColor('#fff0f3')]),
-            ('GRID', (0,0), (-1,-2), 0.5, colors.HexColor('#EFEFEF')),
-            ('LINEABOVE', (0,-1), (-1,-1), 1, colors.HexColor('#2C2C2C')),
-            ('BACKGROUND', (2,-1), (-1,-1), colors.HexColor('#ffb3c1')),
+            ('ROWBACKGROUNDS', (0,1), (-1,-2), [colors.white, colors.HexColor('#F8FAFC')]),
+            ('GRID', (0,0), (-1,-2), 0.5, colors.HexColor('#E2E8F0')),
+            ('LINEABOVE', (0,-1), (-1,-1), 1, colors.HexColor('#2C3E50')),
+            ('BACKGROUND', (2,-1), (-1,-1), colors.HexColor('#ADE8F4')),
             ('PADDING', (0,0), (-1,-1), 8),
         ]))
         
@@ -438,7 +449,7 @@ if st.session_state['bill_items']:
         
         footer_data = [
             [Paragraph("<b>Payment Info:</b><br/>Paid via " + payment_status + "<br/>Account: ARTH LIFE Official", styles['Normal']),
-             Paragraph("<font size=14><b>Thank you!</b></font>", ParagraphStyle('ThankYou', parent=styles['Normal'], alignment=2, textColor=colors.HexColor('#e43f5a')))]
+             Paragraph("<font size=14><b>Thank you!</b></font>", ParagraphStyle('ThankYou', parent=styles['Normal'], alignment=2, textColor=colors.HexColor('#0077B6')))]
         ]
         footer_table = Table(footer_data, colWidths=[300, 210])
         footer_table.setStyle(TableStyle([
