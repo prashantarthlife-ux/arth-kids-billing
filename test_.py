@@ -351,6 +351,9 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
         with pd.ExcelWriter(EXCEL_FILE, engine='openpyxl') as writer:
             df_new_rows.to_excel(writer, sheet_name=clean_exhibition_name, index=False)
     
+    # -------------------------------------------------------------
+    # PREVIOUS CLEAN INVOICE FORMAT WITH UPDATED ARTH LIFE INFO & ZERO TAXES
+    # -------------------------------------------------------------
     doc = SimpleDocTemplate(pdf_filename, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
     elements = []
     styles = getSampleStyleSheet()
@@ -375,7 +378,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     bill_to_data = [
         [Paragraph("<b>INVOICE TO:</b>", styles['Normal']), Paragraph("<b>COMPANY / EXHIBITION DETAILS:</b>", styles['Normal'])],
         [Paragraph(f"<b>Client Name:</b> {cust_name}<br/><b>Mobile:</b> {cust_mobile}", styles['Normal']),
-         Paragraph(f"<b>ARTH LIFE POS</b><br/>{exhibition_name} Counter<br/>Email: support@arthlife.com", styles['Normal'])]
+         Paragraph(f"<b>ARTH LIFE</b><br/>Navmaharashtra Society, Parvati Industrial Estate,<br/>Parvati Paytha, Pune, Maharashtra 411009<br/>Email: support@arthlife.com | Ph: +91 75572 07557", styles['Normal'])]
     ]
     bill_to_table = Table(bill_to_data, colWidths=[250, 260])
     bill_to_table.setStyle(TableStyle([
@@ -402,8 +405,8 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     td_center = ParagraphStyle('TDC', fontName='Helvetica', fontSize=9, textColor=colors.HexColor('#333333'), alignment=1)
     td_right = ParagraphStyle('TDR', fontName='Helvetica', fontSize=9, textColor=colors.HexColor('#333333'), alignment=2)
     
-    for _, row in pd.DataFrame(st.session_state['bill_items']).iterrows():
-        desc = f"{row['Product Name']} ({row['Size']}) [SKU: {row['SKU']}]"
+    for _, row in df_final_active.iterrows():
+        desc = f"{row['Product Name']} ({row['Size']}) [SKU: {row['SKU']}] | GST: 0.0%"
         table_data.append([
             Paragraph(desc, td_style),
             Paragraph(f"{row['Price']:.2f}", td_center),
@@ -429,7 +432,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
         ('TOPPADDING', (0,0), (-1,0), 8),
         ('ROWBACKGROUNDS', (0,1), (-1,-2), [colors.white, colors.HexColor('#F8FAFC')]),
         ('GRID', (0,0), (-1,-2), 0.5, colors.HexColor('#E2E8F0')),
-        ('LINEABOVE', (0,-1), (-1,-1), 1, colors.HexColor('#2C2C2C')),
+        ('LINEABOVE', (0,-1), (-1,-1), 1, colors.HexColor('#2C3E50')),
         ('BACKGROUND', (2,-1), (-1,-1), colors.HexColor('#ADE8F4')),
         ('PADDING', (0,0), (-1,-1), 8),
     ]))
@@ -438,7 +441,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     elements.append(Spacer(1, 30))
     
     footer_data = [
-        [Paragraph("<b>Payment Info:</b><br/>Paid via " + payment_status + "<br/>Account: ARTH LIFE Official", styles['Normal']),
+        [Paragraph("<b>Payment Info:</b><br/>Paid via " + payment_status + "<br/>Account: ARTH LIFE Official (CGST/SGST/IGST: Rs. 0.00)", styles['Normal']),
          Paragraph("<font size=14><b>Thank you!</b></font>", ParagraphStyle('ThankYou', parent=styles['Normal'], alignment=2, textColor=colors.HexColor('#0077B6')))]
     ]
     footer_table = Table(footer_data, colWidths=[300, 210])
@@ -448,6 +451,8 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     elements.append(footer_table)
     
     doc.build(elements)
+    # -------------------------------------------------------------
+
     st.success("🎉 Invoice saved, PDF generated, and Master Excel updated successfully!")
     st.session_state['pdf_ready'] = pdf_filename
     st.rerun()
@@ -463,7 +468,6 @@ if 'pdf_ready' in st.session_state and os.path.exists(st.session_state['pdf_read
     
     b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
     
-    # Corrected JavaScript template with escaped double braces {{ and }}
     pdf_download_link = f'''
         <div style="display: flex; gap: 10px; margin-bottom: 15px;">
             <a href="data:application/pdf;base64,{b64_pdf}" download="{os.path.basename(st.session_state['pdf_ready'])}" style="flex: 1; background-color: #0077B6; color: white; padding: 12px 20px; text-align: center; text-decoration: none; font-weight: bold; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,119,182,0.3);">
