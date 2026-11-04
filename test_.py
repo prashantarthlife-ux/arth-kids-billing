@@ -429,7 +429,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
         ('TOPPADDING', (0,0), (-1,0), 8),
         ('ROWBACKGROUNDS', (0,1), (-1,-2), [colors.white, colors.HexColor('#F8FAFC')]),
         ('GRID', (0,0), (-1,-2), 0.5, colors.HexColor('#E2E8F0')),
-        ('LINEABOVE', (0,-1), (-1,-1), 1, colors.HexColor('#2C3E50')),
+        ('LINEABOVE', (0,-1), (-1,-1), 1, colors.HexColor('#2C2C2C')),
         ('BACKGROUND', (2,-1), (-1,-1), colors.HexColor('#ADE8F4')),
         ('PADDING', (0,0), (-1,-1), 8),
     ]))
@@ -463,13 +463,13 @@ if 'pdf_ready' in st.session_state and os.path.exists(st.session_state['pdf_read
     
     b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
     
-    # Safe JavaScript download & Print trigger button without browser blocking issues
+    # Corrected JavaScript template with escaped double braces {{ and }}
     pdf_download_link = f'''
         <div style="display: flex; gap: 10px; margin-bottom: 15px;">
             <a href="data:application/pdf;base64,{b64_pdf}" download="{os.path.basename(st.session_state['pdf_ready'])}" style="flex: 1; background-color: #0077B6; color: white; padding: 12px 20px; text-align: center; text-decoration: none; font-weight: bold; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,119,182,0.3);">
                 📥 Click Here to Download PDF
             </a>
-            <button onclick="var win = window.open('data:application/pdf;base64,{b64_pdf}'); setTimeout(function(){win.print();}, 1000);" style="flex: 1; background-color: #2e7d32; color: white; padding: 12px 20px; border: none; font-weight: bold; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 10px rgba(46,125,50,0.3);">
+            <button onclick="var win = window.open('data:application/pdf;base64,{b64_pdf}'); setTimeout(function(){{win.print();}}, 1000);" style="flex: 1; background-color: #2e7d32; color: white; padding: 12px 20px; border: none; font-weight: bold; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 10px rgba(46,125,50,0.3);">
                 🖨️ Click Here to Print Bill Directly
             </button>
         </div>
