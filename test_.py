@@ -345,13 +345,14 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
         
     df_new_rows = pd.DataFrame(rows_to_save)
     
-    # 1. SAVE TO SUPABASE CLOUD DATABASE
+    # 1. SAVE TO SUPABASE CLOUD DATABASE (With Error Stoppage for Debugging)
     try:
         if supabase:
             records = df_new_rows.to_dict(orient="records")
             supabase.table("exhibition_sales").insert(records).execute()
     except Exception as e:
-        st.error(f"❌ Supabase Cloud Error: {e}")
+        st.error(f"❌ Supabase Cloud Error Detail: {e}")
+        st.stop()  # He error la screen var thambavun thevel jyamule ti gayab honar nahi!
 
     # 2. SAVE TO LOCAL EXCEL FILE (Backup / Sync)
     try:
