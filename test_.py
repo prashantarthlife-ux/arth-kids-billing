@@ -9,34 +9,78 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
-# 1. Page Configuration & Custom Styling
+# 1. Page Configuration & Custom Attractive Streamlit Styling
 st.set_page_config(page_title="ARTH LIFE - Exhibition Invoice Generator", page_icon="🛍️", layout="wide")
 
 st.markdown("""
     <style>
-    .main-title {
-        font-size: 40px;
-        color: #0083B0;
+    .stApp {
+        background-color: #0E1117;
+        color: #FAFAFA;
+    }
+    .main-banner {
+        background: linear-gradient(90deg, #1f4068 0%, #162447 100%);
+        padding: 25px;
+        border-radius: 12px;
         text-align: center;
-        font-weight: bold;
-        margin-top: 10px;
+        border: 1px solid #e43f5a;
+        box-shadow: 0 4px 20px rgba(228, 63, 90, 0.2);
         margin-bottom: 25px;
     }
-    .stButton>button {
-        width: 100%;
+    .banner-title {
+        font-size: 32px;
+        font-weight: 800;
+        color: #FFFFFF;
+        letter-spacing: 1px;
+        margin: 0;
+    }
+    .stTextInput>div>div>input {
+        background-color: #1a1a24;
+        color: white;
         border-radius: 8px;
-        font-weight: bold;
-        height: 45px;
+        border: 1px solid #303841;
+    }
+    .stButton>button {
+        background: linear-gradient(135deg, #e43f5a 0%, #ff6584 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-weight: bold !important;
+        height: 48px !important;
+        box-shadow: 0 4px 12px rgba(228, 63, 90, 0.4);
+        transition: all 0.3s ease;
+    }
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 18px rgba(228, 63, 90, 0.6);
+    }
+    [data-testid="stSidebar"] {
+        background-color: #161b22;
+        border-right: 1px solid #303841;
+    }
+    div[data-testid="stMetric"] {
+        background-color: #161b22;
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #303841;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
     </style>
 """, unsafe_allow_html=True)
 
-# Header with Logo and Larger Font Name (Tagline Removed)
+# Header Section with Logo & Attractive Title Banner
 col_logo1, col_logo2, col_logo3 = st.columns([1, 3, 1])
 with col_logo2:
     if os.path.exists("logo.png"):
-        st.image("logo.png", width=140)
-    st.markdown('<p class="main-title">🛍️ ARTH LIFE EXHIBITION INVOICE GENERATOR</p>', unsafe_allow_html=True)
+        c_img1, c_img2, c_img3 = st.columns([1, 1, 1])
+        with c_img2:
+            st.image("logo.png", width=120)
+            
+    st.markdown("""
+        <div class="main-banner">
+            <p class="banner-title">🛍️ ARTH LIFE EXHIBITION INVOICE GENERATOR</p>
+        </div>
+    """, unsafe_allow_html=True)
 
 # 2. ABSOLUTE PATH SETUP FOR GOOGLE DRIVE & LOCAL SYNC
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -68,7 +112,6 @@ st.session_state['ex_place_input'] = exhibition_place
 
 clean_exhibition_name = "".join([c if c.isalnum() else "_" for c in exhibition_name])
 
-# Date-wise folder path inside exhibition folder
 date_str = datetime.datetime.now().strftime("%Y-%m-%d")
 exhibition_folder = os.path.join(BASE_PDF_FOLDER, clean_exhibition_name, date_str)
 if not os.path.exists(exhibition_folder):
@@ -178,7 +221,7 @@ product_database = {
 }
 
 # 7. Main Layout: Customer Details & Scanner Gun Input with Validations
-col1, col2 = st.columns([1, 1])
+col1, col2 = st.columns([1, 1], gap="large")
 
 with col1:
     st.markdown("### 👤 Customer Details")
@@ -191,7 +234,7 @@ with col2:
     
     scanned_barcode_input = st.text_input("🔍 Scan Barcode Here", placeholder="Scan tag or type barcode...", key="scanner_input", autocomplete="off")
 
-# Validate customer name (Alphabets only) and mobile number (Exact 10 digits)
+# Validate customer name and mobile number
 is_name_valid = cust_name.replace(" ", "").isalpha()
 is_mobile_valid = cust_mobile.isdigit() and len(cust_mobile) == 10
 
@@ -231,7 +274,7 @@ if scanned_barcode_input:
         if scanned_barcode_input != "":
             st.error(f"⚠️ Barcode '{scanned_barcode_input}' not found in product database!")
 
-# 8. Active Final Bill Summary with Real-Time Manual Quantity Edit
+# 8. Active Final Bill Summary with Real-Time Manual Quantity Edit & Payment Method Option
 if st.session_state['bill_items']:
     st.markdown("---")
     st.markdown(f"### 📄 Active Bill Summary — **{st.session_state['current_bill_no']}** ({exhibition_name})")
@@ -264,7 +307,8 @@ if st.session_state['bill_items']:
     
     st.markdown(f"### 💰 **Grand Total: Rs. {grand_total}**")
     
-    payment_status = st.selectbox("💳 Payment Status / Mode", ["Cash", "UPI / GPay / PhonePe", "Credit/Debit Card"])
+    # Payment Method Selection Option added here
+    payment_status = st.selectbox("💳 Select Payment Status / Mode", ["Cash", "UPI / GPay / PhonePe", "Credit/Debit Card"])
     
     st.markdown("### 🚀 Finalize & Generate Invoice PDF")
     
@@ -311,7 +355,7 @@ if st.session_state['bill_items']:
         styles = getSampleStyleSheet()
         
         inv_title_style = ParagraphStyle('InvTitle', fontName='Helvetica-Bold', fontSize=24, textColor=colors.HexColor('#2C2C2C'), alignment=0)
-        company_style = ParagraphStyle('CompStyle', fontName='Helvetica-Bold', fontSize=12, textColor=colors.HexColor('#0083B0'), alignment=2)
+        company_style = ParagraphStyle('CompStyle', fontName='Helvetica-Bold', fontSize=12, textColor=colors.HexColor('#e43f5a'), alignment=2)
         sub_company_style = ParagraphStyle('SubCompStyle', fontName='Helvetica', fontSize=9, textColor=colors.HexColor('#555555'), alignment=2)
         
         header_data = [
@@ -367,7 +411,7 @@ if st.session_state['bill_items']:
             ])
             
         tot_label = ParagraphStyle('TotL', fontName='Helvetica-Bold', fontSize=11, textColor=colors.HexColor('#2C2C2C'), alignment=2)
-        tot_val = ParagraphStyle('TotV', fontName='Helvetica-Bold', fontSize=11, textColor=colors.HexColor('#0083B0'), alignment=2)
+        tot_val = ParagraphStyle('TotV', fontName='Helvetica-Bold', fontSize=11, textColor=colors.HexColor('#e43f5a'), alignment=2)
         
         table_data.append([
             Paragraph("", td_style),
@@ -378,14 +422,14 @@ if st.session_state['bill_items']:
         
         item_table = Table(table_data, colWidths=[230, 90, 60, 130])
         item_table.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#B2F0FF')),
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#ffccd5')),
             ('ALIGN', (0,0), (-1,-1), 'LEFT'),
             ('BOTTOMPADDING', (0,0), (-1,0), 8),
             ('TOPPADDING', (0,0), (-1,0), 8),
-            ('ROWBACKGROUNDS', (0,1), (-1,-2), [colors.white, colors.HexColor('#F5F9FA')]),
+            ('ROWBACKGROUNDS', (0,1), (-1,-2), [colors.white, colors.HexColor('#fff0f3')]),
             ('GRID', (0,0), (-1,-2), 0.5, colors.HexColor('#EFEFEF')),
             ('LINEABOVE', (0,-1), (-1,-1), 1, colors.HexColor('#2C2C2C')),
-            ('BACKGROUND', (2,-1), (-1,-1), colors.HexColor('#E0F7FA')),
+            ('BACKGROUND', (2,-1), (-1,-1), colors.HexColor('#ffb3c1')),
             ('PADDING', (0,0), (-1,-1), 8),
         ]))
         
@@ -394,7 +438,7 @@ if st.session_state['bill_items']:
         
         footer_data = [
             [Paragraph("<b>Payment Info:</b><br/>Paid via " + payment_status + "<br/>Account: ARTH LIFE Official", styles['Normal']),
-             Paragraph("<font size=14><b>Thank you!</b></font>", ParagraphStyle('ThankYou', parent=styles['Normal'], alignment=2, textColor=colors.HexColor('#0083B0')))]
+             Paragraph("<font size=14><b>Thank you!</b></font>", ParagraphStyle('ThankYou', parent=styles['Normal'], alignment=2, textColor=colors.HexColor('#e43f5a')))]
         ]
         footer_table = Table(footer_data, colWidths=[300, 210])
         footer_table.setStyle(TableStyle([
@@ -482,7 +526,3 @@ if os.path.exists(EXCEL_FILE):
         st.error(f"Error loading exhibition dashboards: {e}")
 else:
     st.info("ℹ️ Master Excel file not created yet. Save your first bill to view exhibition dashboards here.")
-    
-    
-    
-    
