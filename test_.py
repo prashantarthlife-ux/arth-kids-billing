@@ -71,10 +71,10 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Initialize Supabase Client directly with exact verified credentials from dashboard
+# Initialize Supabase Client directly with exact new key from your dashboard screenshot
 try:
     SUPABASE_URL = "https://rvglxhbmdeucjqcqkjgk.supabase.co"
-    SUPABASE_KEY = "sb_publishable_i38toK_2gJbuu3xH0VRUnw_BvgIKyDf"
+    SUPABASE_KEY = "sb_publishable_S8phi4zqs2_Ewm-ce9rWhQ_3pz16..."[cite: 15]
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
     supabase = None
@@ -480,7 +480,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     except:
         pass
 
-    # Success message with 5 seconds pause so user can see it clearly
+    # Success message with 5 seconds pause
     st.success("🎉 Bill saved to Supabase Cloud & PDF generated successfully!")
     st.session_state['pdf_ready'] = pdf_filename
     
