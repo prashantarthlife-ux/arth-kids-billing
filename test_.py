@@ -71,10 +71,10 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Initialize Supabase Client directly with exact new key from your dashboard screenshot
+# Initialize Supabase Client directly with exact verified credentials from dashboard
 try:
     SUPABASE_URL = "https://rvglxhbmdeucjqcqkjgk.supabase.co"
-    SUPABASE_KEY = "sb_publishable_S8phi4zqs2_Ewm-ce9rWhQ_3pz16..."[cite: 15]
+    SUPABASE_KEY = "sb_publishable_S8phi4zqs2_Ewm-ce9rWhQ_3pz16..."
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
     supabase = None
@@ -526,6 +526,9 @@ if 'pdf_ready' in st.session_state and os.path.exists(st.session_state['pdf_read
         st.markdown(f"👉 **[Click Here to Send Invoice via WhatsApp]({whatsapp_url})**", unsafe_allow_html=True)
 
 if st.button("🔄 Complete & Start Next Bill"):
+    st.success("🎉 Previous bill completed successfully! Starting next bill...")
+    time.sleep(5)  # ५ सेकंद मेसेज स्क्रीनवर थांबेल
+    
     st.session_state['bill_items'] = []
     if 'pdf_ready' in st.session_state:
         del st.session_state['pdf_ready']
