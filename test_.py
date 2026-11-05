@@ -428,7 +428,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     
     doc.build(elements)
 
-    # 2. UPLOAD PDF TO SUPABASE STORAGE BUCKET ("invoices")
+    # 2. UPLOAD PDF TO SUPABASE STORAGE BUCKET ("invoices") WITH UPSERT
     cloud_pdf_url = pdf_filename
     try:
         if supabase:
@@ -437,11 +437,11 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
             
             storage_path = f"{clean_exhibition_name}/{date_str}/Bill_{current_bill}_{date_str}.pdf"
             
-            # Uploading to Supabase Storage Bucket
+            # Uploading to Supabase Storage Bucket with upsert enabled
             supabase.storage.from_("invoices").upload(
                 path=storage_path,
                 file=file_bytes,
-                file_options={"content-type": "application/pdf"}
+                file_options={"content-type": "application/pdf", "upsert": "true"}
             )
             # Getting Public URL
             cloud_pdf_url = supabase.storage.from_("invoices").get_public_url(storage_path)
