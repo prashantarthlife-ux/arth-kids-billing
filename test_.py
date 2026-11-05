@@ -115,6 +115,9 @@ if 'last_generated_pdf' not in st.session_state:
 if 'last_bill_no' not in st.session_state:
     st.session_state['last_bill_no'] = None
 
+if 'bill_items' not in st.session_state:
+    st.session_state['bill_items'] = []
+
 # 3. Sidebar: Exhibition Setup & Admin Settings
 st.sidebar.header("🎪 Exhibition Setup & Switcher")
 
@@ -220,9 +223,6 @@ try:
 except:
     default_bill_no = "ARTH-0001"
 
-if 'bill_items' not in st.session_state:
-    st.session_state['bill_items'] = []
-
 if 'current_bill_no' not in st.session_state:
     st.session_state['current_bill_no'] = default_bill_no
 
@@ -243,8 +243,7 @@ with col1:
 
 with col2:
     st.markdown("### 📷 Barcode Scanner Gun / Input Mode")
-    st.info("⚡ Click inside the box below and scan the product barcode using your Scanner Gun or type tag ID.")
-    scanned_barcode_input = st.text_input("🔍 Scan Barcode Here", placeholder="Scan tag or type barcode...", key="scanner_input", autocomplete="off")
+    st.info("⚡ Click inside the box below and scan multiple product barcodes using your Scanner Gun continuously.")
 
 is_name_valid = cust_name.replace(" ", "").isalpha()
 is_mobile_valid = cust_mobile.isdigit() and len(cust_mobile) == 10
@@ -254,70 +253,87 @@ if not is_name_valid:
 if not is_mobile_valid:
     st.warning("⚠️ Mobile Number must be exactly 10 digits.")
 
-if scanned_barcode_input:
-    scanned_barcode_input = scanned_barcode_input.strip()
-    if scanned_barcode_input in product_database:
-        selected_prod = product_database[scanned_barcode_input]
+# Scanner Callback Function for Continuous Multi-Product Scanning
+def process_scan():
+    barcode = st.session_state.get("scanner_input", "").strip()
+    if barcode:
+        if barcode in product_database:
+            selected_prod = product_database[barcode]
+            
+            item_found = False
+            for item in st.session_state['bill_items']:
+                if item["barcode_id"] == barcode:
+                    item["quantity"] += 1
+                    item["total"] = item["quantity"] * item["price"]
+                    item_found = True
+                    break
+            
+            if not item_found:
+                st.session_state['bill_items'].append({
+                    "bill_no": st.session_state['current_bill_no'],
+                    "customer_name": cust_name,
+                    "mobile_number": cust_mobile,
+                    "exhibition_name": exhibition_name,
+                    "location": exhibition_place,
+                    "sku": selected_prod["sku"],
+                    "barcode_id": barcode,
+                    "product_name": selected_prod["name"],
+                    "size": selected_prod["size"],
+                    "price": selected_prod["price"],
+                    "quantity": 1,
+                    "total": selected_prod["price"]
+                })
+        else:
+            st.error(f"⚠️ Barcode '{barcode}' database madhe sapadla nahi!")
         
-        item_found = False
-        for item in st.session_state['bill_items']:
-            if item["barcode_id"] == scanned_barcode_input:
-                item_found = True
-                break
-        
-        if not item_found:
-            st.session_state['bill_items'].append({
-                "bill_no": st.session_state['current_bill_no'],
-                "customer_name": cust_name,
-                "mobile_number": cust_mobile,
-                "exhibition_name": exhibition_name,
-                "location": exhibition_place,
-                "sku": selected_prod["sku"],
-                "barcode_id": scanned_barcode_input,
-                "product_name": selected_prod["name"],
-                "size": selected_prod["size"],
-                "price": selected_prod["price"],
-                "quantity": 1,
-                "total": selected_prod["price"]
-            })
-            st.success(f"✅ **Added to Bill:** {selected_prod['name']} ({selected_prod['size']}) - ₹{selected_prod['price']}")
-    else:
-        if scanned_barcode_input != "":
-            st.error(f"⚠️ Barcode '{scanned_barcode_input}' not found in product database!")
+        st.session_state["scanner_input"] = ""
 
-# 7. Active Bill Summary
+st.text_input("🔍 Scan Barcode Here", placeholder="Scan tag or type barcode and press Enter...", key="scanner_input", on_change=process_scan, autocomplete="off")
+
+# 7. Active Bill Summary & Item Cancellation / Bill Cancellation
 if st.session_state['bill_items']:
     st.markdown("---")
     st.markdown(f"### 📄 Active Bill Summary — **{st.session_state['current_bill_no']}** ({exhibition_name})")
-    st.info("💡 Tip: You can manually edit the **Quantity** column in the table below. The total will update instantly.")
     
-    df_current = pd.DataFrame(st.session_state['bill_items'])
+    # Bill Cancel & Item Removal controls header
+    c_action1, c_action2 = st.columns([3, 1])
+    with c_action2:
+        if st.button("❌ Cancel Entire Bill", type="secondary"):
+            st.session_state['bill_items'] = []
+            st.success("🗑️ Current bill cancelled successfully!")
+            st.rerun()
+
+    st.info("💡 Tip: Edit quantity directly, or use the delete buttons below to remove specific products.")
     
-    edited_df = st.data_editor(
-        df_current[["sku", "barcode_id", "product_name", "size", "price", "quantity", "total"]],
-        num_rows="fixed",
-        key="bill_editor"
-    )
-    
+    # Display items with individual delete option
     updated_items = []
-    for i, row in edited_df.iterrows():
-        qty = int(row["quantity"])
-        if qty < 1:
-            qty = 1
-        price = float(row["price"])
-        subtotal = qty * price
-        
-        item_data = st.session_state['bill_items'][i]
-        item_data["quantity"] = qty
-        item_data["price"] = price
-        item_data["total"] = subtotal
-        updated_items.append(item_data)
+    for idx, item in enumerate(st.session_state['bill_items']):
+        cols = st.columns([3, 1, 1, 1, 1])
+        with cols[0]:
+            st.write(f"**{item['product_name']}** ({item['size']}) [SKU: {item['sku']}]")
+        with cols[1]:
+            st.write(f"₹{item['price']}")
+        with cols[2]:
+            # Quantity modifier
+            new_qty = st.number_input("Qty", min_value=1, value=item['quantity'], key=f"qty_{idx}", label_visibility="collapsed")
+            item['quantity'] = new_qty
+            item['total'] = new_qty * item['price']
+        with cols[3]:
+            st.write(f"**₹{item['total']}**")
+        with cols[4]:
+            if st.button("🗑️ Remove", key=f"del_{idx}"):
+                continue # skip adding this item to remove it
+        updated_items.append(item)
         
     st.session_state['bill_items'] = updated_items
-    df_final_active = pd.DataFrame(st.session_state['bill_items'])
-    grand_total = df_final_active["total"].sum()
     
-    st.markdown(f"### 💰 **Grand Total: Rs. {grand_total}**")
+    if st.session_state['bill_items']:
+        df_final_active = pd.DataFrame(st.session_state['bill_items'])
+        grand_total = df_final_active["total"].sum()
+        st.markdown(f"### 💰 **Grand Total: Rs. {grand_total}**")
+    else:
+        st.warning("⚠️ All items removed from current bill.")
+        st.rerun()
 
 # PAYMENT METHOD & SAVE BUTTON
 st.markdown("---")
@@ -381,6 +397,9 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     td_center = ParagraphStyle('TDC', fontName='Helvetica', fontSize=9, textColor=colors.HexColor('#333333'), alignment=1)
     td_right = ParagraphStyle('TDR', fontName='Helvetica', fontSize=9, textColor=colors.HexColor('#333333'), alignment=2)
     
+    df_final_active = pd.DataFrame(st.session_state['bill_items'])
+    grand_total = df_final_active["total"].sum()
+    
     for _, row in df_final_active.iterrows():
         desc = f"{row['product_name']} ({row['size']}) [SKU: {row['sku']}] | GST: 0.0%"
         table_data.append([
@@ -428,7 +447,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     
     doc.build(elements)
 
-    # 2. UPLOAD PDF TO SUPABASE STORAGE BUCKET ("invoices") WITH UPSERT
+    # 2. UPLOAD PDF TO SUPABASE STORAGE BUCKET
     cloud_pdf_url = pdf_filename
     try:
         if supabase:
@@ -437,20 +456,18 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
             
             storage_path = f"{clean_exhibition_name}/{date_str}/Bill_{current_bill}_{date_str}.pdf"
             
-            # Uploading to Supabase Storage Bucket with upsert enabled
             supabase.storage.from_("invoices").upload(
                 path=storage_path,
                 file=file_bytes,
                 file_options={"content-type": "application/pdf", "upsert": "true"}
             )
-            # Getting Public URL
             cloud_pdf_url = supabase.storage.from_("invoices").get_public_url(storage_path)
     except Exception as e:
         print("Cloud Storage Upload Note:", e)
 
     # Prepare rows for database insertion
     rows_to_save = []
-    for _, row in pd.DataFrame(st.session_state['bill_items']).iterrows():
+    for _, row in df_final_active.iterrows():
         rows_to_save.append({
             "timestamp": timestamp,
             "exhibition_name": exhibition_name,
@@ -500,12 +517,10 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     except Exception as e:
         print("Excel backup note:", e)
 
-    # Store in session state so download button stays visible
     st.session_state['last_generated_pdf'] = pdf_filename
     st.session_state['last_bill_no'] = current_bill
     st.success("🎉 Bill saved & PDF uploaded to Supabase successfully!")
     
-    # Reset bill items and prepare next bill number
     st.session_state['bill_items'] = []
     
     try:
