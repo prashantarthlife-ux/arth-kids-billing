@@ -345,10 +345,13 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
         
     df_new_rows = pd.DataFrame(rows_to_save)
     
-    # 1. SAVE TO SUPABASE CLOUD DATABASE (`sales_records` table)
+    # 1. SAVE TO SUPABASE CLOUD DATABASE (Standard Python Client)
     try:
         if supabase:
             records = df_new_rows.to_dict(orient="records")
+            # Remove 'id' if present to let Supabase auto-increment it cleanly
+            for r in records:
+                r.pop('id', None)
             supabase.table("sales_records").insert(records).execute()
     except Exception as e:
         st.error(f"❌ Supabase Cloud Error Detail: {e}")
