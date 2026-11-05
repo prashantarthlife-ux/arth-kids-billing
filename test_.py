@@ -110,6 +110,11 @@ if 'ex_name_input' not in st.session_state:
 if 'ex_place_input' not in st.session_state:
     st.session_state['ex_place_input'] = "Viman Nagar, Pune"
 
+if 'last_generated_pdf' not in st.session_state:
+    st.session_state['last_generated_pdf'] = None
+if 'last_bill_no' not in st.session_state:
+    st.session_state['last_bill_no'] = None
+
 # 3. Sidebar: Exhibition Setup & Admin Settings
 st.sidebar.header("🎪 Exhibition Setup & Switcher")
 
@@ -321,7 +326,8 @@ payment_status = st.selectbox("Select Payment Status / Mode", ["Cash", "UPI / GP
 
 if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_name_valid and is_mobile_valid and len(st.session_state['bill_items']) > 0)):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    pdf_filename = os.path.join(exhibition_folder, f"Bill_{st.session_state['current_bill_no']}_{date_str}.pdf")
+    current_bill = st.session_state['current_bill_no']
+    pdf_filename = os.path.join(exhibition_folder, f"Bill_{current_bill}_{date_str}.pdf")
     
     # 1. PDF GENERATION LOCALLY
     doc = SimpleDocTemplate(pdf_filename, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
@@ -334,7 +340,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     
     header_data = [
         [Paragraph("<b>INVOICE</b>", inv_title_style), Paragraph(f"<b>{exhibition_name}</b>", company_style)],
-        [Paragraph(f"<b>Bill No:</b> {st.session_state['current_bill_no']}<br/><b>Date:</b> {timestamp}", styles['Normal']), 
+        [Paragraph(f"<b>Bill No:</b> {current_bill}<br/><b>Date:</b> {timestamp}", styles['Normal']), 
          Paragraph(f"{exhibition_place}<br/><b>Payment:</b> {payment_status}", sub_company_style)]
     ]
     header_table = Table(header_data, colWidths=[250, 260])
@@ -429,7 +435,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
             with open(pdf_filename, "rb") as f:
                 file_bytes = f.read()
             
-            storage_path = f"{clean_exhibition_name}/{date_str}/Bill_{st.session_state['current_bill_no']}_{date_str}.pdf"
+            storage_path = f"{clean_exhibition_name}/{date_str}/Bill_{current_bill}_{date_str}.pdf"
             
             # Uploading to Supabase Storage Bucket
             supabase.storage.from_("invoices").upload(
@@ -449,7 +455,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
             "timestamp": timestamp,
             "exhibition_name": exhibition_name,
             "location": exhibition_place,
-            "bill_no": st.session_state['current_bill_no'],
+            "bill_no": current_bill,
             "customer_name": cust_name,
             "mobile_number": cust_mobile,
             "sku": row["sku"],
@@ -494,16 +500,14 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     except Exception as e:
         print("Excel backup note:", e)
 
-    # 5. EXACTLY 1 SECOND SUCCESS POPUP AND START NEXT BILL
+    # Store in session state so download button stays visible
+    st.session_state['last_generated_pdf'] = pdf_filename
+    st.session_state['last_bill_no'] = current_bill
     st.success("🎉 Bill saved & PDF uploaded to Supabase successfully!")
     
-    time.sleep(1)  # 1 सेकंद मेसेज स्क्रीनवर थांबेल
-    
-    # Reset states for next bill automatically
+    # Reset bill items and prepare next bill number
     st.session_state['bill_items'] = []
-    if 'pdf_ready' in st.session_state:
-        del st.session_state['pdf_ready']
-        
+    
     try:
         if supabase:
             res = supabase.table("sales_records").select("bill_no").execute()
@@ -518,8 +522,19 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
             st.session_state['current_bill_no'] = "ARTH-0001"
     except:
         st.session_state['current_bill_no'] = "ARTH-0001"
-        
-    st.rerun()
+
+# 5. DOWNLOAD BUTTON DISPLAY FOR LAST GENERATED INVOICE
+if st.session_state['last_generated_pdf'] and os.path.exists(st.session_state['last_generated_pdf']):
+    st.markdown("---")
+    st.success(f"📥 Latest Generated Invoice Ready: **{st.session_state['last_bill_no']}**")
+    with open(st.session_state['last_generated_pdf'], "rb") as pdf_file:
+        st.download_button(
+            label=f"📥 Click Here to Download PDF ({st.session_state['last_bill_no']})",
+            data=pdf_file,
+            file_name=os.path.basename(st.session_state['last_generated_pdf']),
+            mime="application/pdf",
+            type="primary"
+        )
 
 if not (is_name_valid and is_mobile_valid):
     st.warning("⚠️ Please enter a valid Customer Name (alphabets only) and a 10-digit Mobile Number to enable bill generation.")
