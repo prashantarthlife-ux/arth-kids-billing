@@ -2,9 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 import datetime
-import urllib.parse
 import shutil
-import base64
 import time
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -12,7 +10,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from supabase import create_client, Client
 
-# 1. Page Configuration & Professional Corporate Light Styling
+# 1. Page Configuration & Professional Styling
 st.set_page_config(page_title="ARTH LIFE - Exhibition Invoice Generator", page_icon="🛍️", layout="wide")
 
 st.markdown("""
@@ -79,7 +77,7 @@ try:
 except Exception as e:
     supabase = None
 
-# Header Section with Logo & Title Banner
+# Header Section with Title Banner
 col_logo1, col_logo2, col_logo3 = st.columns([1, 3, 1])
 with col_logo2:
     if os.path.exists("logo.png"):
@@ -183,7 +181,7 @@ if sidebar_authenticated:
     st.sidebar.markdown(f"### 📁 Exhibition Folder & ZIP")
     exhibition_main_path = os.path.join(BASE_PDF_FOLDER, clean_exhibition_name)
     if os.path.exists(exhibition_main_path) and os.listdir(exhibition_main_path):
-        zip_filename = os.path.join(BASE_DIR, f"{clean_exhibition_name}_Invoices")
+        zip_filename = os.path.join(BASE_DIR, clean_exhibition_name + "_Invoices")
         shutil.make_archive(zip_filename, 'zip', exhibition_main_path)
         zip_path = f"{zip_filename}.zip"
         
@@ -290,28 +288,18 @@ if st.session_state['bill_items']:
     
     df_current = pd.DataFrame(st.session_state['bill_items'])
     
-    disp_df = df_current.rename(columns={
-        "sku": "SKU",
-        "barcode_id": "Barcode ID",
-        "product_name": "Product Name",
-        "size": "Size",
-        "price": "Price",
-        "quantity": "Quantity",
-        "total": "Total"
-    })
-
     edited_df = st.data_editor(
-        disp_df[["SKU", "Barcode ID", "Product Name", "Size", "Price", "Quantity", "Total"]],
+        df_current[["sku", "barcode_id", "product_name", "size", "price", "quantity", "total"]],
         num_rows="fixed",
         key="bill_editor"
     )
     
     updated_items = []
     for i, row in edited_df.iterrows():
-        qty = int(row["Quantity"])
+        qty = int(row["quantity"])
         if qty < 1:
             qty = 1
-        price = float(row["Price"])
+        price = float(row["price"])
         subtotal = qty * price
         
         item_data = st.session_state['bill_items'][i]
@@ -335,58 +323,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     pdf_filename = os.path.join(exhibition_folder, f"Bill_{st.session_state['current_bill_no']}_{date_str}.pdf")
     
-    rows_to_save = []
-    for _, row in pd.DataFrame(st.session_state['bill_items']).iterrows():
-        rows_to_save.append({
-            "timestamp": timestamp,
-            "exhibition_name": exhibition_name,
-            "location": exhibition_place,
-            "bill_no": st.session_state['current_bill_no'],
-            "customer_name": cust_name,
-            "mobile_number": cust_mobile,
-            "sku": row["sku"],
-            "barcode_id": row["barcode_id"],
-            "product_name": row["product_name"],
-            "size": row["size"],
-            "price": row["price"],
-            "quantity": row["quantity"],
-            "payment_status": payment_status,
-            "total": row["total"],
-            "bill_pdf_link": pdf_filename
-        })
-        
-    df_new_rows = pd.DataFrame(rows_to_save)
-    
-    # 1. SAVE TO SUPABASE CLOUD DATABASE
-    try:
-        if supabase:
-            records = df_new_rows.to_dict(orient="records")
-            for r in records:
-                r.pop('id', None)
-            supabase.table("sales_records").insert(records).execute()
-    except Exception as e:
-        st.error(f"❌ Supabase Cloud Error Detail: {e}")
-        st.stop()
-
-    # 2. SAVE TO LOCAL EXCEL FILE (Backup / Sync)
-    try:
-        if os.path.exists(EXCEL_FILE):
-            all_sheets_data = pd.read_excel(EXCEL_FILE, sheet_name=None)
-            if clean_exhibition_name in all_sheets_data:
-                all_sheets_data[clean_exhibition_name] = pd.concat([all_sheets_data[clean_exhibition_name], df_new_rows], ignore_index=True)
-            else:
-                all_sheets_data[clean_exhibition_name] = df_new_rows
-                
-            with pd.ExcelWriter(EXCEL_FILE, engine='openpyxl') as writer:
-                for sh_name, sh_df in all_sheets_data.items():
-                    sh_df.to_excel(writer, sheet_name=sh_name, index=False)
-        else:
-            with pd.ExcelWriter(EXCEL_FILE, engine='openpyxl') as writer:
-                df_new_rows.to_excel(writer, sheet_name=clean_exhibition_name, index=False)
-    except Exception as e:
-        print("Excel backup note:", e)
-
-    # 3. PDF GENERATION
+    # 1. PDF GENERATION LOCALLY
     doc = SimpleDocTemplate(pdf_filename, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
     elements = []
     styles = getSampleStyleSheet()
@@ -474,7 +411,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     elements.append(Spacer(1, 30))
     
     footer_data = [
-        [Paragraph("<b>Payment Info:</b><br/>Paid via " + payment_status + "<br/>Account: ARTH LIFE Official (CGST/SGST/IGST: Rs. 0.00)", styles['Normal']),
+        [Paragraph("<b>Payment Info:</b><br/>Paid via " + payment_status + "<br/>Account: ARTH LIFE Official", styles['Normal']),
          Paragraph("<font size=14><b>Thank you!</b></font>", ParagraphStyle('ThankYou', parent=styles['Normal'], alignment=2, textColor=colors.HexColor('#0077B6')))]
     ]
     footer_table = Table(footer_data, colWidths=[300, 210])
@@ -484,65 +421,89 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     elements.append(footer_table)
     
     doc.build(elements)
-    
+
+    # 2. UPLOAD PDF TO SUPABASE STORAGE BUCKET ("invoices")
+    cloud_pdf_url = pdf_filename
     try:
-        if os.name == 'nt':
-            os.startfile(os.path.abspath(exhibition_folder))
-    except:
-        pass
+        if supabase:
+            with open(pdf_filename, "rb") as f:
+                file_bytes = f.read()
+            
+            storage_path = f"{clean_exhibition_name}/{date_str}/Bill_{st.session_state['current_bill_no']}_{date_str}.pdf"
+            
+            # Uploading to Supabase Storage Bucket
+            supabase.storage.from_("invoices").upload(
+                path=storage_path,
+                file=file_bytes,
+                file_options={"content-type": "application/pdf"}
+            )
+            # Getting Public URL
+            cloud_pdf_url = supabase.storage.from_("invoices").get_public_url(storage_path)
+    except Exception as e:
+        print("Cloud Storage Upload Note:", e)
 
-    # Success message with 5 seconds pause
-    st.success("🎉 Bill saved to Supabase Cloud & PDF generated successfully!")
-    st.session_state['pdf_ready'] = pdf_filename
+    # Prepare rows for database insertion
+    rows_to_save = []
+    for _, row in pd.DataFrame(st.session_state['bill_items']).iterrows():
+        rows_to_save.append({
+            "timestamp": timestamp,
+            "exhibition_name": exhibition_name,
+            "location": exhibition_place,
+            "bill_no": st.session_state['current_bill_no'],
+            "customer_name": cust_name,
+            "mobile_number": cust_mobile,
+            "sku": row["sku"],
+            "barcode_id": row["barcode_id"],
+            "product_name": row["product_name"],
+            "size": row["size"],
+            "price": row["price"],
+            "quantity": row["quantity"],
+            "payment_status": payment_status,
+            "total": row["total"],
+            "bill_pdf_link": cloud_pdf_url
+        })
+        
+    df_new_rows = pd.DataFrame(rows_to_save)
     
-    time.sleep(5)  # ५ सेकंद मेसेज स्क्रीनवर थांबेल
-    st.rerun()
+    # 3. SAVE TO SUPABASE CLOUD DATABASE
+    try:
+        if supabase:
+            records = df_new_rows.to_dict(orient="records")
+            for r in records:
+                r.pop('id', None)
+            supabase.table("sales_records").insert(records).execute()
+    except Exception as e:
+        st.error(f"❌ Supabase Cloud Error Detail: {e}")
+        st.stop()
 
-if not (is_name_valid and is_mobile_valid):
-    st.warning("⚠️ Please enter a valid Customer Name (alphabets only) and a 10-digit Mobile Number to enable bill generation.")
+    # 4. SAVE TO LOCAL EXCEL FILE (Backup / Sync)
+    try:
+        if os.path.exists(EXCEL_FILE):
+            all_sheets_data = pd.read_excel(EXCEL_FILE, sheet_name=None)
+            if clean_exhibition_name in all_sheets_data:
+                all_sheets_data[clean_exhibition_name] = pd.concat([all_sheets_data[clean_exhibition_name], df_new_rows], ignore_index=True)
+            else:
+                all_sheets_data[clean_exhibition_name] = df_new_rows
+                
+            with pd.ExcelWriter(EXCEL_FILE, engine='openpyxl') as writer:
+                for sh_name, sh_df in all_sheets_data.items():
+                    sh_df.to_excel(writer, sheet_name=sh_name, index=False)
+        else:
+            with pd.ExcelWriter(EXCEL_FILE, engine='openpyxl') as writer:
+                df_new_rows.to_excel(writer, sheet_name=clean_exhibition_name, index=False)
+    except Exception as e:
+        print("Excel backup note:", e)
 
-if 'pdf_ready' in st.session_state and os.path.exists(st.session_state['pdf_ready']):
-    st.markdown("### 📥 Download, Print & Share Invoice")
+    # 5. EXACTLY 1 SECOND SUCCESS POPUP AND START NEXT BILL
+    st.success("🎉 Bill saved & PDF uploaded to Supabase successfully!")
     
-    with open(st.session_state['pdf_ready'], "rb") as pdf_file:
-        pdf_bytes = pdf_file.read()
+    time.sleep(1)  # 1 सेकंद मेसेज स्क्रीनवर थांबेल
     
-    b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
-    
-    pdf_download_link = f'''
-        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-            <a href="data:application/pdf;base64,{b64_pdf}" download="{os.path.basename(st.session_state['pdf_ready'])}" style="flex: 1; background-color: #0077B6; color: white; padding: 12px 20px; text-align: center; text-decoration: none; font-weight: bold; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,119,182,0.3);">
-                📥 Click Here to Download PDF
-            </a>
-            <button onclick="var win = window.open('data:application/pdf;base64,{b64_pdf}'); setTimeout(function(){{win.print();}}, 1000);" style="flex: 1; background-color: #2e7d32; color: white; padding: 12px 20px; border: none; font-weight: bold; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 10px rgba(46,125,50,0.3);">
-                🖨️ Click Here to Print Bill Directly
-            </button>
-        </div>
-    '''
-    st.markdown(pdf_download_link, unsafe_allow_html=True)
-
-    d_col1, d_col2 = st.columns(2)
-    with d_col1:
-        st.download_button(
-            label="📥 Download Professional Invoice PDF", 
-            data=pdf_bytes, 
-            file_name=os.path.basename(st.session_state['pdf_ready']), 
-            mime="application/pdf", 
-            key="dl_current_pdf"
-        )
-    with d_col2:
-        msg = f"Hello {cust_name}, Thank you for shopping at {exhibition_name}! Your Bill No: {st.session_state['current_bill_no']}, Grand Total: Rs. {grand_total}."
-        encoded_msg = urllib.parse.quote(msg)
-        whatsapp_url = f"https://wa.me/91{cust_mobile}?text={encoded_msg}"
-        st.markdown(f"👉 **[Click Here to Send Invoice via WhatsApp]({whatsapp_url})**", unsafe_allow_html=True)
-
-if st.button("🔄 Complete & Start Next Bill"):
-    st.success("🎉 Previous bill completed successfully! Starting next bill...")
-    time.sleep(5)  # ५ सेकंद मेसेज स्क्रीनवर थांबेल
-    
+    # Reset states for next bill automatically
     st.session_state['bill_items'] = []
     if 'pdf_ready' in st.session_state:
         del st.session_state['pdf_ready']
+        
     try:
         if supabase:
             res = supabase.table("sales_records").select("bill_no").execute()
@@ -557,9 +518,13 @@ if st.button("🔄 Complete & Start Next Bill"):
             st.session_state['current_bill_no'] = "ARTH-0001"
     except:
         st.session_state['current_bill_no'] = "ARTH-0001"
+        
     st.rerun()
 
-# 8. LIVE DASHBOARDS FROM SUPABASE (`sales_records` table)
+if not (is_name_valid and is_mobile_valid):
+    st.warning("⚠️ Please enter a valid Customer Name (alphabets only) and a 10-digit Mobile Number to enable bill generation.")
+
+# 8. LIVE DASHBOARDS FROM SUPABASE
 st.markdown("---")
 st.markdown("## 📊 Exhibition-wise Live Dashboards (Analytics)")
 
@@ -591,7 +556,7 @@ try:
                     d_col3.metric(f"🛍️ Cumulative Sales", f"Rs. {tot_ex_sales}")
                     st.markdown("---")
             else:
-                st.info("ℹ️ Supabase table connected, but no records found yet. Save your first bill to see analytics!")
+                st.info("ℹ️ Supabase table connected, but no records found yet.")
         else:
             st.info("ℹ️ Supabase table is empty right now. Create your first bill above to initialize live dashboards!")
     else:
