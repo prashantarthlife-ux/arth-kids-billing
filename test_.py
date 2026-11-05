@@ -150,7 +150,7 @@ if sidebar_authenticated:
     
     try:
         if supabase:
-            res = supabase.table("exhibition_sales").select("*").eq("Exhibition Name", exhibition_name).execute()
+            res = supabase.table("sales_records").select("*").eq("Exhibition Name", exhibition_name).execute()
             df_ex_report = pd.DataFrame(res.data) if res.data else pd.DataFrame()
         else:
             df_ex_report = pd.DataFrame()
@@ -200,7 +200,7 @@ else:
 # 4. Bill ID Generator
 try:
     if supabase:
-        res = supabase.table("exhibition_sales").select("Bill No").execute()
+        res = supabase.table("sales_records").select("Bill No").execute()
         all_bills = list(set([row["Bill No"] for row in res.data if row.get("Bill No")])) if res.data else []
         if all_bills:
             num = len(all_bills) + 1
@@ -345,14 +345,14 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
         
     df_new_rows = pd.DataFrame(rows_to_save)
     
-    # 1. SAVE TO SUPABASE CLOUD DATABASE (With Error Stoppage for Debugging)
+    # 1. SAVE TO SUPABASE CLOUD DATABASE (`sales_records` table)
     try:
         if supabase:
             records = df_new_rows.to_dict(orient="records")
-            supabase.table("exhibition_sales").insert(records).execute()
+            supabase.table("sales_records").insert(records).execute()
     except Exception as e:
         st.error(f"❌ Supabase Cloud Error Detail: {e}")
-        st.stop()  # He error la screen var thambavun thevel jyamule ti gayab honar nahi!
+        st.stop()
 
     # 2. SAVE TO LOCAL EXCEL FILE (Backup / Sync)
     try:
@@ -525,7 +525,7 @@ if st.button("🔄 Complete & Start Next Bill"):
         del st.session_state['pdf_ready']
     try:
         if supabase:
-            res = supabase.table("exhibition_sales").select("Bill No").execute()
+            res = supabase.table("sales_records").select("Bill No").execute()
             all_bills = list(set([row["Bill No"] for row in res.data if row.get("Bill No")])) if res.data else []
             num = len(all_bills) + 1
             next_bill = f"ARTH-{num:04d}"
@@ -539,13 +539,13 @@ if st.button("🔄 Complete & Start Next Bill"):
         st.session_state['current_bill_no'] = "ARTH-0001"
     st.rerun()
 
-# 8. LIVE DASHBOARDS FROM SUPABASE (Safe Handling)
+# 8. LIVE DASHBOARDS FROM SUPABASE (`sales_records` table)
 st.markdown("---")
 st.markdown("## 📊 Exhibition-wise Live Dashboards (Analytics)")
 
 try:
     if supabase:
-        res = supabase.table("exhibition_sales").select("*").execute()
+        res = supabase.table("sales_records").select("*").execute()
         
         if res.data and len(res.data) > 0:
             df_all_sales = pd.DataFrame(res.data)
