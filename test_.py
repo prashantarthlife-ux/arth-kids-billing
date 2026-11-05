@@ -71,13 +71,10 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Initialize Supabase Client with your real anon/public key below
+# Initialize Supabase Client securely from Streamlit Secrets
 try:
-    SUPABASE_URL = "https://rvglxhbmdeucjqcqkjgk.supabase.co"
-    
-    # 👇 इ. खालील डबल्स कोट्स (" ") च्या आत तुमची Supabase डॅशबोर्डवरील खरी 'anon' / 'public' Key पेस्ट करा:
-    SUPABASE_KEY = "PASTE_YOUR_ACTUAL_ANON_KEY_HERE"
-    
+    SUPABASE_URL = st.secrets["supabase"]["url"]
+    SUPABASE_KEY = st.secrets["supabase"]["key"]
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
     supabase = None
