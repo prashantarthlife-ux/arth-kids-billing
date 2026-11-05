@@ -71,10 +71,11 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Initialize Supabase Client directly with exact verified credentials from dashboard
+# Initialize Supabase Client
 try:
     SUPABASE_URL = "https://rvglxhbmdeucjqcqkjgk.supabase.co"
-    SUPABASE_KEY = "sb_publishable_S8phi4zqs2_Ewm-ce9rWhQ_3pz16..."
+    # ⚠️ टीप: खाली तुमची Supabase डॅशबोर्डवरून कॉपी केलेली पूर्ण की टाका (कुठेही '...' किंवा डॉट नको)
+    SUPABASE_KEY = "sb_publishable_S8phi4zqs2_Ewm-ce9rWhQ_3pz16..."  # <--- (जर यात ... असेल तर डॅशबोर्डवर जाऊन कॉपी बटण दाबून पूर्ण की टाका)
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
     supabase = None
