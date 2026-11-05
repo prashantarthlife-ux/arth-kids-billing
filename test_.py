@@ -70,11 +70,11 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Initialize Supabase Client directly to bypass any secrets reading issue
+# Initialize Supabase Client directly with exact verified credentials from dashboard
 try:
-    url = "https://rvglxhbmdeucjqckqjgk.supabase.co"
-    key = "sb_publishable_i38toK_2gJbuu3xH0VRUnw_BvgIKyDf"
-    supabase: Client = create_client(url, key)
+    SUPABASE_URL = "https://rvglxhbmdeucjqcqkjgk.supabase.co"
+    SUPABASE_KEY = "sb_publishable_i38toK_2gJbuu3xH0VRUnw_BvgIKyDf"[cite: 17]
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
     supabase = None
 
@@ -345,7 +345,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
         
     df_new_rows = pd.DataFrame(rows_to_save)
     
-    # 1. SAVE TO SUPABASE CLOUD DATABASE (Standard Python Client with safety check)
+    # 1. SAVE TO SUPABASE CLOUD DATABASE (Standard Python Client)
     try:
         if supabase:
             records = df_new_rows.to_dict(orient="records")
