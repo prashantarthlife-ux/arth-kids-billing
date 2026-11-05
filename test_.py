@@ -268,7 +268,7 @@ if scanned_barcode_input:
                 "Customer Name": cust_name,
                 "Mobile Number": cust_mobile,
                 "Exhibition Name": exhibition_name,
-                "Location": exhibition_place,
+                "location": exhibition_place,
                 "SKU": selected_prod["sku"],
                 "Barcode ID": scanned_barcode_input,
                 "Product Name": selected_prod["name"],
@@ -329,7 +329,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
         rows_to_save.append({
             "Timestamp": timestamp,
             "Exhibition Name": exhibition_name,
-            "Location": exhibition_place,
+            "location": exhibition_place,
             "Bill No": st.session_state['current_bill_no'],
             "Customer Name": cust_name,
             "Mobile Number": cust_mobile,
