@@ -70,10 +70,10 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Initialize Supabase Client securely
+# Initialize Supabase Client directly to bypass any secrets reading issue
 try:
-    url = st.secrets["supabase"]["url"]
-    key = st.secrets["supabase"]["key"]
+    url = "https://rvglxhbmdeucjqckqjgk.supabase.co"
+    key = "sb_publishable_i38toK_2gJbuu3xH0VRUnw_BvgIKyDf"
     supabase: Client = create_client(url, key)
 except Exception as e:
     supabase = None
@@ -345,11 +345,10 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
         
     df_new_rows = pd.DataFrame(rows_to_save)
     
-    # 1. SAVE TO SUPABASE CLOUD DATABASE (Standard Python Client)
+    # 1. SAVE TO SUPABASE CLOUD DATABASE (Standard Python Client with safety check)
     try:
         if supabase:
             records = df_new_rows.to_dict(orient="records")
-            # Remove 'id' if present to let Supabase auto-increment it cleanly
             for r in records:
                 r.pop('id', None)
             supabase.table("sales_records").insert(records).execute()
