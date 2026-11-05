@@ -5,6 +5,7 @@ import datetime
 import urllib.parse
 import shutil
 import base64
+import time
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -73,7 +74,7 @@ st.markdown("""
 # Initialize Supabase Client directly with exact verified credentials from dashboard
 try:
     SUPABASE_URL = "https://rvglxhbmdeucjqcqkjgk.supabase.co"
-    SUPABASE_KEY = "sb_publishable_i38toK_2gJbuu3xH0VRUnw_BvgIKyDf"[cite: 17]
+    SUPABASE_KEY = "sb_publishable_i38toK_2gJbuu3xH0VRUnw_BvgIKyDf"
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
     supabase = None
@@ -345,7 +346,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
         
     df_new_rows = pd.DataFrame(rows_to_save)
     
-    # 1. SAVE TO SUPABASE CLOUD DATABASE (Standard Python Client)
+    # 1. SAVE TO SUPABASE CLOUD DATABASE
     try:
         if supabase:
             records = df_new_rows.to_dict(orient="records")
@@ -479,8 +480,11 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     except:
         pass
 
+    # Success message with 5 seconds pause so user can see it clearly
     st.success("🎉 Bill saved to Supabase Cloud & PDF generated successfully!")
     st.session_state['pdf_ready'] = pdf_filename
+    
+    time.sleep(5)  # ५ सेकंद मेसेज स्क्रीनवर थांबेल
     st.rerun()
 
 if not (is_name_valid and is_mobile_valid):
