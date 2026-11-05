@@ -273,7 +273,7 @@ if scanned_barcode_input:
                 "Barcode ID": scanned_barcode_input,
                 "Product Name": selected_prod["name"],
                 "Size": selected_prod["size"],
-                "Price": selected_prod["price"],
+                "price": selected_prod["price"],
                 "Quantity": 1,
                 "Total": selected_prod["price"]
             })
@@ -290,8 +290,13 @@ if st.session_state['bill_items']:
     
     df_current = pd.DataFrame(st.session_state['bill_items'])
     
+    # Map lowercase price back if needed for display
+    disp_df = df_current.copy()
+    if "price" in disp_df.columns and "Price" not in disp_df.columns:
+        disp_df["Price"] = disp_df["price"]
+
     edited_df = st.data_editor(
-        df_current[["SKU", "Barcode ID", "Product Name", "Size", "Price", "Quantity", "Total"]],
+        disp_df[["SKU", "Barcode ID", "Product Name", "Size", "Price", "Quantity", "Total"]],
         num_rows="fixed",
         key="bill_editor"
     )
@@ -306,6 +311,9 @@ if st.session_state['bill_items']:
         
         item_data = st.session_state['bill_items'][i]
         item_data["Quantity"] = qty
+        item_data["price"] = price
+        if "Price" in item_data:
+            item_data["Price"] = price
         item_data["Total"] = subtotal
         updated_items.append(item_data)
         
@@ -318,7 +326,7 @@ if st.session_state['bill_items']:
 # PAYMENT METHOD & SAVE BUTTON
 st.markdown("---")
 st.markdown("### 💳 Payment & Finalize Invoice")
-payment_status = st.selectbox("Select Payment Status / Mode", ["Cash", "UPI / GPay / PhonePe", "Credit/Debit Card"], key="payment_mode_select")
+payment_status = st.selectbox("Select Payment Status / Mode", ["Cash", "UPI / GPay / PhonePe", "Credit/DebitCard"], key="payment_mode_select")
 
 if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_name_valid and is_mobile_valid and len(st.session_state['bill_items']) > 0)):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -326,6 +334,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     
     rows_to_save = []
     for _, row in pd.DataFrame(st.session_state['bill_items']).iterrows():
+        p_val = row.get("price", row.get("Price", 0))
         rows_to_save.append({
             "Timestamp": timestamp,
             "Exhibition Name": exhibition_name,
@@ -337,7 +346,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
             "Barcode ID": row["Barcode ID"],
             "Product Name": row["Product Name"],
             "Size": row["Size"],
-            "Price": row["Price"],
+            "price": p_val,
             "Quantity": row["Quantity"],
             "Payment Status": payment_status,
             "Total": row["Total"],
@@ -428,10 +437,11 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     td_right = ParagraphStyle('TDR', fontName='Helvetica', fontSize=9, textColor=colors.HexColor('#333333'), alignment=2)
     
     for _, row in df_final_active.iterrows():
+        p_val = row.get("price", row.get("Price", 0))
         desc = f"{row['Product Name']} ({row['Size']}) [SKU: {row['SKU']}] | GST: 0.0%"
         table_data.append([
             Paragraph(desc, td_style),
-            Paragraph(f"{row['Price']:.2f}", td_center),
+            Paragraph(f"{p_val:.2f}", td_center),
             Paragraph(str(row["Quantity"]), td_center),
             Paragraph(f"{row['Total']:.2f}", td_right)
         ])
