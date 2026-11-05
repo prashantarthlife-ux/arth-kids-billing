@@ -151,7 +151,7 @@ if sidebar_authenticated:
     
     try:
         if supabase:
-            res = supabase.table("sales_records").select("*").eq("Exhibition Name", exhibition_name).execute()
+            res = supabase.table("sales_records").select("*").eq("exhibition_name", exhibition_name).execute()
             df_ex_report = pd.DataFrame(res.data) if res.data else pd.DataFrame()
         else:
             df_ex_report = pd.DataFrame()
@@ -160,9 +160,9 @@ if sidebar_authenticated:
                 if clean_exhibition_name in all_sheets:
                     df_ex_report = pd.read_excel(EXCEL_FILE, sheet_name=clean_exhibition_name)
                 
-        if not df_ex_report.empty and "Total" in df_ex_report.columns:
-            ex_sales = df_ex_report["Total"].sum()
-            ex_bills = df_ex_report["Bill No"].nunique() if "Bill No" in df_ex_report.columns else 0
+        if not df_ex_report.empty and "total" in df_ex_report.columns:
+            ex_sales = df_ex_report["total"].sum()
+            ex_bills = df_ex_report["bill_no"].nunique() if "bill_no" in df_ex_report.columns else 0
             st.sidebar.metric(f"💰 {exhibition_name} Sales", f"Rs. {ex_sales}")
             st.sidebar.metric(f"🧾 {exhibition_name} Bills", ex_bills)
         else:
@@ -201,8 +201,8 @@ else:
 # 4. Bill ID Generator
 try:
     if supabase:
-        res = supabase.table("sales_records").select("Bill No").execute()
-        all_bills = list(set([row["Bill No"] for row in res.data if row.get("Bill No")])) if res.data else []
+        res = supabase.table("sales_records").select("bill_no").execute()
+        all_bills = list(set([row["bill_no"] for row in res.data if row.get("bill_no")])) if res.data else []
         if all_bills:
             num = len(all_bills) + 1
             candidate_bill = f"ARTH-{num:04d}"
@@ -258,24 +258,24 @@ if scanned_barcode_input:
         
         item_found = False
         for item in st.session_state['bill_items']:
-            if item["Barcode ID"] == scanned_barcode_input:
+            if item["barcode_id"] == scanned_barcode_input:
                 item_found = True
                 break
         
         if not item_found:
             st.session_state['bill_items'].append({
-                "Bill No": st.session_state['current_bill_no'],
-                "Customer Name": cust_name,
-                "Mobile Number": cust_mobile,
-                "Exhibition Name": exhibition_name,
+                "bill_no": st.session_state['current_bill_no'],
+                "customer_name": cust_name,
+                "mobile_number": cust_mobile,
+                "exhibition_name": exhibition_name,
                 "location": exhibition_place,
-                "SKU": selected_prod["sku"],
-                "Barcode ID": scanned_barcode_input,
-                "Product Name": selected_prod["name"],
-                "Size": selected_prod["size"],
+                "sku": selected_prod["sku"],
+                "barcode_id": scanned_barcode_input,
+                "product_name": selected_prod["name"],
+                "size": selected_prod["size"],
                 "price": selected_prod["price"],
-                "Quantity": 1,
-                "Total": selected_prod["price"]
+                "quantity": 1,
+                "total": selected_prod["price"]
             })
             st.success(f"✅ **Added to Bill:** {selected_prod['name']} ({selected_prod['size']}) - ₹{selected_prod['price']}")
     else:
@@ -290,10 +290,15 @@ if st.session_state['bill_items']:
     
     df_current = pd.DataFrame(st.session_state['bill_items'])
     
-    # Map lowercase price back if needed for display
-    disp_df = df_current.copy()
-    if "price" in disp_df.columns and "Price" not in disp_df.columns:
-        disp_df["Price"] = disp_df["price"]
+    disp_df = df_current.rename(columns={
+        "sku": "SKU",
+        "barcode_id": "Barcode ID",
+        "product_name": "Product Name",
+        "size": "Size",
+        "price": "Price",
+        "quantity": "Quantity",
+        "total": "Total"
+    })
 
     edited_df = st.data_editor(
         disp_df[["SKU", "Barcode ID", "Product Name", "Size", "Price", "Quantity", "Total"]],
@@ -310,23 +315,21 @@ if st.session_state['bill_items']:
         subtotal = qty * price
         
         item_data = st.session_state['bill_items'][i]
-        item_data["Quantity"] = qty
+        item_data["quantity"] = qty
         item_data["price"] = price
-        if "Price" in item_data:
-            item_data["Price"] = price
-        item_data["Total"] = subtotal
+        item_data["total"] = subtotal
         updated_items.append(item_data)
         
     st.session_state['bill_items'] = updated_items
     df_final_active = pd.DataFrame(st.session_state['bill_items'])
-    grand_total = df_final_active["Total"].sum()
+    grand_total = df_final_active["total"].sum()
     
     st.markdown(f"### 💰 **Grand Total: Rs. {grand_total}**")
 
 # PAYMENT METHOD & SAVE BUTTON
 st.markdown("---")
 st.markdown("### 💳 Payment & Finalize Invoice")
-payment_status = st.selectbox("Select Payment Status / Mode", ["Cash", "UPI / GPay / PhonePe", "Credit/DebitCard"], key="payment_mode_select")
+payment_status = st.selectbox("Select Payment Status / Mode", ["Cash", "UPI / GPay / PhonePe", "Credit/Debit Card"], key="payment_mode_select")
 
 if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_name_valid and is_mobile_valid and len(st.session_state['bill_items']) > 0)):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -334,23 +337,22 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     
     rows_to_save = []
     for _, row in pd.DataFrame(st.session_state['bill_items']).iterrows():
-        p_val = row.get("price", row.get("Price", 0))
         rows_to_save.append({
-            "Timestamp": timestamp,
-            "Exhibition Name": exhibition_name,
+            "timestamp": timestamp,
+            "exhibition_name": exhibition_name,
             "location": exhibition_place,
-            "Bill No": st.session_state['current_bill_no'],
-            "Customer Name": cust_name,
-            "Mobile Number": cust_mobile,
-            "SKU": row["SKU"],
-            "Barcode ID": row["Barcode ID"],
-            "Product Name": row["Product Name"],
-            "Size": row["Size"],
-            "price": p_val,
-            "Quantity": row["Quantity"],
-            "Payment Status": payment_status,
-            "Total": row["Total"],
-            "Bill PDF Link": pdf_filename
+            "bill_no": st.session_state['current_bill_no'],
+            "customer_name": cust_name,
+            "mobile_number": cust_mobile,
+            "sku": row["sku"],
+            "barcode_id": row["barcode_id"],
+            "product_name": row["product_name"],
+            "size": row["size"],
+            "price": row["price"],
+            "quantity": row["quantity"],
+            "payment_status": payment_status,
+            "total": row["total"],
+            "bill_pdf_link": pdf_filename
         })
         
     df_new_rows = pd.DataFrame(rows_to_save)
@@ -437,13 +439,12 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     td_right = ParagraphStyle('TDR', fontName='Helvetica', fontSize=9, textColor=colors.HexColor('#333333'), alignment=2)
     
     for _, row in df_final_active.iterrows():
-        p_val = row.get("price", row.get("Price", 0))
-        desc = f"{row['Product Name']} ({row['Size']}) [SKU: {row['SKU']}] | GST: 0.0%"
+        desc = f"{row['product_name']} ({row['size']}) [SKU: {row['sku']}] | GST: 0.0%"
         table_data.append([
             Paragraph(desc, td_style),
-            Paragraph(f"{p_val:.2f}", td_center),
-            Paragraph(str(row["Quantity"]), td_center),
-            Paragraph(f"{row['Total']:.2f}", td_right)
+            Paragraph(f"{row['price']:.2f}", td_center),
+            Paragraph(str(row["quantity"]), td_center),
+            Paragraph(f"{row['total']:.2f}", td_right)
         ])
         
     tot_label = ParagraphStyle('TotL', fontName='Helvetica-Bold', fontSize=11, textColor=colors.HexColor('#2C2C2C'), alignment=2)
@@ -544,8 +545,8 @@ if st.button("🔄 Complete & Start Next Bill"):
         del st.session_state['pdf_ready']
     try:
         if supabase:
-            res = supabase.table("sales_records").select("Bill No").execute()
-            all_bills = list(set([row["Bill No"] for row in res.data if row.get("Bill No")])) if res.data else []
+            res = supabase.table("sales_records").select("bill_no").execute()
+            all_bills = list(set([row["bill_no"] for row in res.data if row.get("bill_no")])) if res.data else []
             num = len(all_bills) + 1
             next_bill = f"ARTH-{num:04d}"
             while next_bill in all_bills:
@@ -569,19 +570,19 @@ try:
         if res.data and len(res.data) > 0:
             df_all_sales = pd.DataFrame(res.data)
             
-            if not df_all_sales.empty and "Timestamp" in df_all_sales.columns:
-                df_all_sales['ParsedDate'] = pd.to_datetime(df_all_sales['Timestamp'], errors='coerce').dt.date
+            if not df_all_sales.empty and "timestamp" in df_all_sales.columns:
+                df_all_sales['ParsedDate'] = pd.to_datetime(df_all_sales['timestamp'], errors='coerce').dt.date
                 today_date_val = datetime.date.today()
                 df_today = df_all_sales[df_all_sales['ParsedDate'] == today_date_val]
                 
-                exhibitions = df_all_sales['Exhibition Name'].unique()
+                exhibitions = df_all_sales['exhibition_name'].unique()
                 for ex in exhibitions:
-                    df_ex = df_all_sales[df_all_sales['Exhibition Name'] == ex]
-                    df_ex_today = df_today[df_today['Exhibition Name'] == ex] if not df_today.empty else pd.DataFrame()
+                    df_ex = df_all_sales[df_all_sales['exhibition_name'] == ex]
+                    df_ex_today = df_today[df_today['exhibition_name'] == ex] if not df_today.empty else pd.DataFrame()
                     
-                    ex_rev = df_ex_today['Total'].sum() if not df_ex_today.empty else 0
-                    ex_ord = df_ex_today['Bill No'].nunique() if not df_ex_today.empty else 0
-                    tot_ex_sales = df_ex['Total'].sum()
+                    ex_rev = df_ex_today['total'].sum() if not df_ex_today.empty else 0
+                    ex_ord = df_ex_today['bill_no'].nunique() if not df_ex_today.empty else 0
+                    tot_ex_sales = df_ex['total'].sum()
                     
                     st.markdown(f"### 🎪 Exhibition: **{ex}**")
                     d_col1, d_col2, d_col3 = st.columns(3)
