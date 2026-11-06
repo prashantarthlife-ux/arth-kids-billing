@@ -126,9 +126,9 @@ if 'last_cust_mobile' not in st.session_state:
 if 'bill_items' not in st.session_state:
     st.session_state['bill_items'] = []
 
-# Header Section with Perfectly Centered Logo & Title Banner
+# Header Section with Centered Logo & Title Banner
 if LOGO_FILE:
-    c_img1, c_img2, c_img3 = st.columns([2, 1, 2])  # Balanced columns to center logo perfectly
+    c_img1, c_img2, c_img3 = st.columns([2, 1, 2])
     with c_img2:
         st.image(LOGO_FILE, width=120)
             
@@ -336,9 +336,9 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     company_style = ParagraphStyle('CompStyle', fontName='Helvetica-Bold', fontSize=12, textColor=colors.HexColor('#0077B6'), alignment=2)
     sub_company_style = ParagraphStyle('SubCompStyle', fontName='Helvetica', fontSize=9, textColor=colors.HexColor('#555555'), alignment=2)
     
-    # Header containing Logo and Invoice Details (Widths adjusted so INVOICE fits in 1 line)
+    # Header containing Arth Life Logo and Invoice Details
     if LOGO_FILE:
-        logo_img = RLImage(LOGO_FILE, width=50, height=50)
+        logo_img = RLImage(LOGO_FILE, width=55, height=55)
         header_table_data = [
             [logo_img, Paragraph(f"<b>{exhibition_name}</b>", company_style)],
             [Paragraph("<b>INVOICE</b>", inv_title_style), Paragraph(f"{exhibition_place}<br/><b>Payment:</b> {payment_status}", sub_company_style)]
@@ -541,10 +541,14 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     except:
         st.session_state['current_bill_no'] = "ARTH-0001"
 
-# 5. DOWNLOAD BUTTON & WHATSAPP SHARE
+# 5. DOWNLOAD BUTTON & WHATSAPP SHARE (Clean Filename Link Display)
 if st.session_state['last_generated_pdf'] and os.path.exists(st.session_state['last_generated_pdf']):
     st.markdown("---")
+    pdf_filename_only = os.path.basename(st.session_state['last_generated_pdf'])
+    
     st.success(f"📥 Latest Generated Invoice Ready: **{st.session_state['last_bill_no']}** ({st.session_state['last_cust_name']})")
+    
+    st.markdown(f"🔗 **Invoice File Link:** [{pdf_filename_only}]({st.session_state['last_pdf_url']})")
     
     dl_col1, dl_col2 = st.columns(2)
     with dl_col1:
@@ -552,13 +556,13 @@ if st.session_state['last_generated_pdf'] and os.path.exists(st.session_state['l
             st.download_button(
                 label=f"📥 Download PDF ({st.session_state['last_bill_no']})",
                 data=pdf_file,
-                file_name=os.path.basename(st.session_state['last_generated_pdf']),
+                file_name=pdf_filename_only,
                 mime="application/pdf",
                 type="primary"
             )
             
     with dl_col2:
-        wa_msg = f"Hello {st.session_state['last_cust_name']}, Thank you for shopping with ARTH LIFE! Here is your invoice ({st.session_state['last_bill_no']}): {st.session_state['last_pdf_url']}"
+        wa_msg = f"Hello {st.session_state['last_cust_name']}, Thank you for shopping with ARTH LIFE! Here is your invoice *{pdf_filename_only}*: {st.session_state['last_pdf_url']}"
         encoded_wa_msg = urllib.parse.quote(wa_msg)
         wa_link = f"https://wa.me/91{st.session_state['last_cust_mobile']}?text={encoded_wa_msg}"
         
