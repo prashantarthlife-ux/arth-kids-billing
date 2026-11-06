@@ -77,11 +77,17 @@ try:
 except Exception as e:
     supabase = None
 
-# 2. PATH SETUP
+# 2. PATH SETUP & LOGO CHECK (Supports .jpeg, .jpg, .png automatically)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 EXCEL_FILE = os.path.join(BASE_DIR, "Master_Exhibition_Sales.xlsx")
 BASE_PDF_FOLDER = os.path.join(BASE_DIR, "Generated_Invoices")
-LOGO_FILE = os.path.join(BASE_DIR, "logo.png")
+
+LOGO_FILE = None
+for ext in ["jpeg", "jpg", "png"]:
+    path = os.path.join(BASE_DIR, f"logo.{ext}")
+    if os.path.exists(path):
+        LOGO_FILE = path
+        break
 
 if not os.path.exists(BASE_PDF_FOLDER):
     os.makedirs(BASE_PDF_FOLDER)
@@ -114,7 +120,7 @@ if 'bill_items' not in st.session_state:
 # Header Section with Logo & Title Banner
 col_logo1, col_logo2, col_logo3 = st.columns([1, 4, 1])
 with col_logo2:
-    if os.path.exists(LOGO_FILE):
+    if LOGO_FILE:
         c_img1, c_img2, c_img3 = st.columns([2, 1, 2])
         with c_img2:
             st.image(LOGO_FILE, width=90)
@@ -324,7 +330,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     sub_company_style = ParagraphStyle('SubCompStyle', fontName='Helvetica', fontSize=9, textColor=colors.HexColor('#555555'), alignment=2)
     
     # Header containing Logo (if available) and Invoice Details
-    if os.path.exists(LOGO_FILE):
+    if LOGO_FILE:
         logo_img = RLImage(LOGO_FILE, width=50, height=50)
         header_table_data = [
             [logo_img, Paragraph(f"<b>{exhibition_name}</b>", company_style)],
@@ -345,7 +351,6 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     ]))
     elements.append(header_table)
     
-    # Bill meta info
     meta_data = [
         [Paragraph(f"<b>Bill No:</b> {current_bill}<br/><b>Date:</b> {timestamp}", styles['Normal']), Paragraph("<b>ARTH LIFE OFFICIAL</b>", company_style)]
     ]
