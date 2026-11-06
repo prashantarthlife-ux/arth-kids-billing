@@ -22,14 +22,14 @@ st.markdown("""
     }
     .main-banner {
         background: linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%);
-        padding: 24px;
-        border-radius: 14px;
+        padding: 22px;
+        border-radius: 12px;
         text-align: center;
-        box-shadow: 0 10px 25px -5px rgba(14, 165, 233, 0.3);
+        box-shadow: 0 8px 20px -4px rgba(14, 165, 233, 0.25);
         margin-bottom: 25px;
     }
     .banner-title {
-        font-size: 30px;
+        font-size: 28px;
         font-weight: 800;
         color: #FFFFFF;
         letter-spacing: 0.8px;
@@ -54,7 +54,7 @@ st.markdown("""
         border: none !important;
         border-radius: 10px !important;
         font-weight: 700 !important;
-        height: 50px !important;
+        height: 48px !important;
         box-shadow: 0 4px 12px rgba(14, 165, 233, 0.35);
         transition: all 0.3s ease;
     }
@@ -69,11 +69,11 @@ st.markdown("""
     }
     div[data-testid="stMetric"] {
         background-color: #FFFFFF;
-        padding: 18px;
-        border-radius: 12px;
+        padding: 16px;
+        border-radius: 10px;
         border: 1px solid #E2E8F0;
         box-shadow: 0 4px 12px rgba(0,0,0,0.03);
-        border-left: 6px solid #0EA5E9;
+        border-left: 5px solid #0EA5E9;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -126,11 +126,11 @@ if 'last_cust_mobile' not in st.session_state:
 if 'bill_items' not in st.session_state:
     st.session_state['bill_items'] = []
 
-# Header Section with Wider Logo & Title Banner
+# Header Section with Default Logo Size & Title Banner
 if LOGO_FILE:
-    c_img1, c_img2, c_img3 = st.columns([1, 2, 1])
+    c_img1, c_img2, c_img3 = st.columns([1, 1, 1])
     with c_img2:
-        st.image(LOGO_FILE, width=220)
+        st.image(LOGO_FILE, width=120)  # Default balanced size
             
 st.markdown("""
     <div class="main-banner">
@@ -336,9 +336,9 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     company_style = ParagraphStyle('CompStyle', fontName='Helvetica-Bold', fontSize=12, textColor=colors.HexColor('#0077B6'), alignment=2)
     sub_company_style = ParagraphStyle('SubCompStyle', fontName='Helvetica', fontSize=9, textColor=colors.HexColor('#555555'), alignment=2)
     
-    # Header containing Logo (if available) and Invoice Details (Corrected widths so INVOICE fits in 1 line)
+    # Header containing Logo and Invoice Details (Default size for PDF logo = 50x50)
     if LOGO_FILE:
-        logo_img = RLImage(LOGO_FILE, width=60, height=60)
+        logo_img = RLImage(LOGO_FILE, width=50, height=50)
         header_table_data = [
             [logo_img, Paragraph(f"<b>{exhibition_name}</b>", company_style)],
             [Paragraph("<b>INVOICE</b>", inv_title_style), Paragraph(f"{exhibition_place}<br/><b>Payment:</b> {payment_status}", sub_company_style)]
