@@ -541,14 +541,15 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     except:
         st.session_state['current_bill_no'] = "ARTH-0001"
 
-# 5. DOWNLOAD BUTTON & WHATSAPP SHARE (Clean Filename Link Display)
+# 5. DOWNLOAD BUTTON & WHATSAPP SHARE (Arth Life Branded Clean Message)
 if st.session_state['last_generated_pdf'] and os.path.exists(st.session_state['last_generated_pdf']):
     st.markdown("---")
     pdf_filename_only = os.path.basename(st.session_state['last_generated_pdf'])
     
     st.success(f"📥 Latest Generated Invoice Ready: **{st.session_state['last_bill_no']}** ({st.session_state['last_cust_name']})")
     
-    st.markdown(f"🔗 **Invoice File Link:** [{pdf_filename_only}]({st.session_state['last_pdf_url']})")
+    # App madhe clean Arth Life Invoices link dakhavne
+    st.markdown(f"🔗 **Arth Life Invoices:** [{pdf_filename_only}]({st.session_state['last_pdf_url']})")
     
     dl_col1, dl_col2 = st.columns(2)
     with dl_col1:
@@ -562,14 +563,15 @@ if st.session_state['last_generated_pdf'] and os.path.exists(st.session_state['l
             )
             
     with dl_col2:
-        wa_msg = f"Hello {st.session_state['last_cust_name']}, Thank you for shopping with ARTH LIFE! Here is your invoice *{pdf_filename_only}*: {st.session_state['last_pdf_url']}"
+        # WhatsApp message madhe Arth Life Invoices ani clean format
+        wa_msg = f"Hello {st.session_state['last_cust_name']}, Thank you for shopping with ARTH LIFE! 🛍️\n\nHere is your Arth Life Invoice (*{pdf_filename_only}*):\n{st.session_state['last_pdf_url']}"
         encoded_wa_msg = urllib.parse.quote(wa_msg)
         wa_link = f"https://wa.me/91{st.session_state['last_cust_mobile']}?text={encoded_wa_msg}"
         
         st.markdown(f"""
             <a href="{wa_link}" target="_blank">
                 <button style="background-color: #25D366; color: white; border: none; border-radius: 8px; font-weight: bold; height: 48px; width: 100%; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
-                    💬 Send Bill via WhatsApp
+                    💬 Send Arth Life Invoice via WhatsApp
                 </button>
             </a>
         """, unsafe_allow_html=True)
