@@ -117,19 +117,17 @@ if 'last_cust_mobile' not in st.session_state:
 if 'bill_items' not in st.session_state:
     st.session_state['bill_items'] = []
 
-# Header Section with Logo & Title Banner
-col_logo1, col_logo2, col_logo3 = st.columns([1, 4, 1])
-with col_logo2:
-    if LOGO_FILE:
-        c_img1, c_img2, c_img3 = st.columns([2, 1, 2])
-        with c_img2:
-            st.image(LOGO_FILE, width=90)
+# Header Section with Bigger Logo & Title Banner
+if LOGO_FILE:
+    c_img1, c_img2, c_img3 = st.columns([1, 2, 1])
+    with c_img2:
+        st.image(LOGO_FILE, width=220)  # Logo size increased for better visibility
             
-    st.markdown("""
-        <div class="main-banner">
-            <p class="banner-title">🛍️ ARTH LIFE EXHIBITION INVOICE GENERATOR</p>
-        </div>
-    """, unsafe_allow_html=True)
+st.markdown("""
+    <div class="main-banner">
+        <p class="banner-title">🛍️ ARTH LIFE EXHIBITION INVOICE GENERATOR</p>
+    </div>
+""", unsafe_allow_html=True)
 
 # 3. Sidebar: Exhibition Setup & Admin Settings
 st.sidebar.header("🎪 Exhibition Setup & Switcher")
@@ -331,7 +329,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     
     # Header containing Logo (if available) and Invoice Details
     if LOGO_FILE:
-        logo_img = RLImage(LOGO_FILE, width=50, height=50)
+        logo_img = RLImage(LOGO_FILE, width=60, height=60)
         header_table_data = [
             [logo_img, Paragraph(f"<b>{exhibition_name}</b>", company_style)],
             [Paragraph("<b>INVOICE</b>", inv_title_style), Paragraph(f"{exhibition_place}<br/><b>Payment:</b> {payment_status}", sub_company_style)]
