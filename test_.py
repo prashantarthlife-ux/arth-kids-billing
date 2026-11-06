@@ -3,9 +3,9 @@ import pandas as pd
 import os
 import datetime
 import shutil
-import time
+import urllib.parse
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from supabase import create_client, Client
@@ -28,7 +28,7 @@ st.markdown("""
         margin-bottom: 25px;
     }
     .banner-title {
-        font-size: 30px;
+        font-size: 28px;
         font-weight: 700;
         color: #FFFFFF;
         letter-spacing: 0.5px;
@@ -77,24 +77,11 @@ try:
 except Exception as e:
     supabase = None
 
-# Header Section with Title Banner
-col_logo1, col_logo2, col_logo3 = st.columns([1, 3, 1])
-with col_logo2:
-    if os.path.exists("logo.png"):
-        c_img1, c_img2, c_img3 = st.columns([1, 1, 1])
-        with c_img2:
-            st.image("logo.png", width=110)
-            
-    st.markdown("""
-        <div class="main-banner">
-            <p class="banner-title">🛍️ ARTH LIFE EXHIBITION INVOICE GENERATOR</p>
-        </div>
-    """, unsafe_allow_html=True)
-
 # 2. PATH SETUP
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 EXCEL_FILE = os.path.join(BASE_DIR, "Master_Exhibition_Sales.xlsx")
 BASE_PDF_FOLDER = os.path.join(BASE_DIR, "Generated_Invoices")
+LOGO_FILE = os.path.join(BASE_DIR, "logo.png")
 
 if not os.path.exists(BASE_PDF_FOLDER):
     os.makedirs(BASE_PDF_FOLDER)
@@ -106,17 +93,37 @@ if 'admin_password' not in st.session_state:
     st.session_state['admin_password'] = "arth123"
 
 if 'ex_name_input' not in st.session_state:
-    st.session_state['ex_name_input'] = "Pune Exhibitions"
+    st.session_state['ex_name_input'] = "Mumbai Exhibitions"
 if 'ex_place_input' not in st.session_state:
-    st.session_state['ex_place_input'] = "Viman Nagar, Pune"
+    st.session_state['ex_place_input'] = "Bandra Kurla Complex, Mumbai"
 
 if 'last_generated_pdf' not in st.session_state:
     st.session_state['last_generated_pdf'] = None
 if 'last_bill_no' not in st.session_state:
     st.session_state['last_bill_no'] = None
+if 'last_pdf_url' not in st.session_state:
+    st.session_state['last_pdf_url'] = None
+if 'last_cust_name' not in st.session_state:
+    st.session_state['last_cust_name'] = None
+if 'last_cust_mobile' not in st.session_state:
+    st.session_state['last_cust_mobile'] = None
 
 if 'bill_items' not in st.session_state:
     st.session_state['bill_items'] = []
+
+# Header Section with Logo & Title Banner
+col_logo1, col_logo2, col_logo3 = st.columns([1, 4, 1])
+with col_logo2:
+    if os.path.exists(LOGO_FILE):
+        c_img1, c_img2, c_img3 = st.columns([2, 1, 2])
+        with c_img2:
+            st.image(LOGO_FILE, width=90)
+            
+    st.markdown("""
+        <div class="main-banner">
+            <p class="banner-title">🛍️ ARTH LIFE EXHIBITION INVOICE GENERATOR</p>
+        </div>
+    """, unsafe_allow_html=True)
 
 # 3. Sidebar: Exhibition Setup & Admin Settings
 st.sidebar.header("🎪 Exhibition Setup & Switcher")
@@ -137,14 +144,6 @@ if not os.path.exists(exhibition_folder):
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ Admin Access & Settings")
 
-with st.sidebar.expander("🔑 Change Admin ID & Password"):
-    new_admin_id = st.text_input("New Admin ID", value=st.session_state['admin_user_id'], key="new_adm_id", autocomplete="off")
-    new_admin_pass = st.text_input("New Password", type="password", value=st.session_state['admin_password'], key="new_adm_pass", autocomplete="new-password")
-    if st.button("Update Credentials"):
-        st.session_state['admin_user_id'] = new_admin_id
-        st.session_state['admin_password'] = new_admin_pass
-        st.success("✅ Admin credentials updated successfully!")
-
 sidebar_admin_user = st.sidebar.text_input("Enter Admin ID", type="default", placeholder="Enter ID", key="side_admin_id", autocomplete="off")
 sidebar_admin_pass = st.sidebar.text_input("Enter Password", type="password", placeholder="Enter Password", key="side_admin_pass", autocomplete="new-password")
 
@@ -152,7 +151,6 @@ sidebar_authenticated = (sidebar_admin_user == st.session_state['admin_user_id']
 
 if sidebar_authenticated:
     st.sidebar.success("🔓 Admin Access Granted!")
-    st.sidebar.markdown("---")
     st.sidebar.markdown(f"### 📊 Active Report: {exhibition_name}")
     
     try:
@@ -171,8 +169,6 @@ if sidebar_authenticated:
             ex_bills = df_ex_report["bill_no"].nunique() if "bill_no" in df_ex_report.columns else 0
             st.sidebar.metric(f"💰 {exhibition_name} Sales", f"Rs. {ex_sales}")
             st.sidebar.metric(f"🧾 {exhibition_name} Bills", ex_bills)
-        else:
-            st.sidebar.info("No sales records for this exhibition yet.")
     except Exception as e:
         st.sidebar.error(f"Error loading report: {e}")
 
@@ -183,23 +179,6 @@ if sidebar_authenticated:
                 data=master_f,
                 file_name="Master_Exhibition_Sales.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-    st.sidebar.markdown("---")
-    st.sidebar.markdown(f"### 📁 Exhibition Folder & ZIP")
-    exhibition_main_path = os.path.join(BASE_PDF_FOLDER, clean_exhibition_name)
-    if os.path.exists(exhibition_main_path) and os.listdir(exhibition_main_path):
-        zip_filename = os.path.join(BASE_DIR, clean_exhibition_name + "_Invoices")
-        shutil.make_archive(zip_filename, 'zip', exhibition_main_path)
-        zip_path = f"{zip_filename}.zip"
-        
-        with open(zip_path, "rb") as zip_f:
-            st.sidebar.download_button(
-                label=f"📦 Download {exhibition_name} ZIP",
-                data=zip_f,
-                file_name=os.path.basename(zip_path),
-                mime="application/zip",
-                key="dl_ex_zip"
             )
 else:
     st.sidebar.info("🔒 Enter correct Admin ID & Password to unlock reports.")
@@ -238,22 +217,17 @@ col1, col2 = st.columns([1, 1], gap="large")
 
 with col1:
     st.markdown("### 👤 Customer Details")
-    cust_name = st.text_input("Customer Full Name", "Walk-in Customer")
+    cust_name = st.text_input("Customer Full Name", "Atish")
     cust_mobile = st.text_input("Customer Mobile Number (10 digits)", "9876543210")
 
 with col2:
     st.markdown("### 📷 Barcode Scanner Gun / Input Mode")
     st.info("⚡ Click inside the box below and scan multiple product barcodes using your Scanner Gun continuously.")
 
-is_name_valid = cust_name.replace(" ", "").isalpha()
+is_name_valid = len(cust_name.strip()) > 0
 is_mobile_valid = cust_mobile.isdigit() and len(cust_mobile) == 10
 
-if not is_name_valid:
-    st.warning("⚠️ Customer Name should contain only alphabets (letters).")
-if not is_mobile_valid:
-    st.warning("⚠️ Mobile Number must be exactly 10 digits.")
-
-# Scanner Callback Function for Continuous Multi-Product Scanning
+# Scanner Callback Function
 def process_scan():
     barcode = st.session_state.get("scanner_input", "").strip()
     if barcode:
@@ -290,12 +264,11 @@ def process_scan():
 
 st.text_input("🔍 Scan Barcode Here", placeholder="Scan tag or type barcode and press Enter...", key="scanner_input", on_change=process_scan, autocomplete="off")
 
-# 7. Active Bill Summary & Item Cancellation / Bill Cancellation
+# 7. Active Bill Summary & Item Cancellation
 if st.session_state['bill_items']:
     st.markdown("---")
     st.markdown(f"### 📄 Active Bill Summary — **{st.session_state['current_bill_no']}** ({exhibition_name})")
     
-    # Bill Cancel & Item Removal controls header
     c_action1, c_action2 = st.columns([3, 1])
     with c_action2:
         if st.button("❌ Cancel Entire Bill", type="secondary"):
@@ -303,9 +276,6 @@ if st.session_state['bill_items']:
             st.success("🗑️ Current bill cancelled successfully!")
             st.rerun()
 
-    st.info("💡 Tip: Edit quantity directly, or use the delete buttons below to remove specific products.")
-    
-    # Display items with individual delete option
     updated_items = []
     for idx, item in enumerate(st.session_state['bill_items']):
         cols = st.columns([3, 1, 1, 1, 1])
@@ -314,7 +284,6 @@ if st.session_state['bill_items']:
         with cols[1]:
             st.write(f"₹{item['price']}")
         with cols[2]:
-            # Quantity modifier
             new_qty = st.number_input("Qty", min_value=1, value=item['quantity'], key=f"qty_{idx}", label_visibility="collapsed")
             item['quantity'] = new_qty
             item['total'] = new_qty * item['price']
@@ -322,7 +291,7 @@ if st.session_state['bill_items']:
             st.write(f"**₹{item['total']}**")
         with cols[4]:
             if st.button("🗑️ Remove", key=f"del_{idx}"):
-                continue # skip adding this item to remove it
+                continue
         updated_items.append(item)
         
     st.session_state['bill_items'] = updated_items
@@ -345,26 +314,44 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     current_bill = st.session_state['current_bill_no']
     pdf_filename = os.path.join(exhibition_folder, f"Bill_{current_bill}_{date_str}.pdf")
     
-    # 1. PDF GENERATION LOCALLY
+    # 1. PDF GENERATION LOCALLY WITH LOGO EMBEDDED
     doc = SimpleDocTemplate(pdf_filename, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
     elements = []
     styles = getSampleStyleSheet()
     
-    inv_title_style = ParagraphStyle('InvTitle', fontName='Helvetica-Bold', fontSize=24, textColor=colors.HexColor('#2C3E50'), alignment=0)
+    inv_title_style = ParagraphStyle('InvTitle', fontName='Helvetica-Bold', fontSize=22, textColor=colors.HexColor('#2C3E50'), alignment=0)
     company_style = ParagraphStyle('CompStyle', fontName='Helvetica-Bold', fontSize=12, textColor=colors.HexColor('#0077B6'), alignment=2)
     sub_company_style = ParagraphStyle('SubCompStyle', fontName='Helvetica', fontSize=9, textColor=colors.HexColor('#555555'), alignment=2)
     
-    header_data = [
-        [Paragraph("<b>INVOICE</b>", inv_title_style), Paragraph(f"<b>{exhibition_name}</b>", company_style)],
-        [Paragraph(f"<b>Bill No:</b> {current_bill}<br/><b>Date:</b> {timestamp}", styles['Normal']), 
-         Paragraph(f"{exhibition_place}<br/><b>Payment:</b> {payment_status}", sub_company_style)]
-    ]
-    header_table = Table(header_data, colWidths=[250, 260])
+    # Header containing Logo (if available) and Invoice Details
+    if os.path.exists(LOGO_FILE):
+        logo_img = RLImage(LOGO_FILE, width=50, height=50)
+        header_table_data = [
+            [logo_img, Paragraph(f"<b>{exhibition_name}</b>", company_style)],
+            [Paragraph("<b>INVOICE</b>", inv_title_style), Paragraph(f"{exhibition_place}<br/><b>Payment:</b> {payment_status}", sub_company_style)]
+        ]
+        header_table = Table(header_table_data, colWidths=[100, 410])
+    else:
+        header_table_data = [
+            [Paragraph("<b>INVOICE</b>", inv_title_style), Paragraph(f"<b>{exhibition_name}</b>", company_style)],
+            [Paragraph(f"<b>Bill No:</b> {current_bill}<br/><b>Date:</b> {timestamp}", styles['Normal']), 
+             Paragraph(f"{exhibition_place}<br/><b>Payment:</b> {payment_status}", sub_company_style)]
+        ]
+        header_table = Table(header_table_data, colWidths=[250, 260])
+        
     header_table.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 15),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 10),
     ]))
     elements.append(header_table)
+    
+    # Bill meta info
+    meta_data = [
+        [Paragraph(f"<b>Bill No:</b> {current_bill}<br/><b>Date:</b> {timestamp}", styles['Normal']), Paragraph("<b>ARTH LIFE OFFICIAL</b>", company_style)]
+    ]
+    meta_table = Table(meta_data, colWidths=[250, 260])
+    meta_table.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP'), ('BOTTOMPADDING', (0,0), (-1,-1), 10)]))
+    elements.append(meta_table)
     elements.append(Spacer(1, 10))
     
     bill_to_data = [
@@ -465,7 +452,6 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     except Exception as e:
         print("Cloud Storage Upload Note:", e)
 
-    # Prepare rows for database insertion
     rows_to_save = []
     for _, row in df_final_active.iterrows():
         rows_to_save.append({
@@ -499,7 +485,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
         st.error(f"❌ Supabase Cloud Error Detail: {e}")
         st.stop()
 
-    # 4. SAVE TO LOCAL EXCEL FILE (Backup / Sync)
+    # 4. SAVE TO LOCAL EXCEL FILE
     try:
         if os.path.exists(EXCEL_FILE):
             all_sheets_data = pd.read_excel(EXCEL_FILE, sheet_name=None)
@@ -519,6 +505,10 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
 
     st.session_state['last_generated_pdf'] = pdf_filename
     st.session_state['last_bill_no'] = current_bill
+    st.session_state['last_pdf_url'] = cloud_pdf_url
+    st.session_state['last_cust_name'] = cust_name
+    st.session_state['last_cust_mobile'] = cust_mobile
+    
     st.success("🎉 Bill saved & PDF uploaded to Supabase successfully!")
     
     st.session_state['bill_items'] = []
@@ -538,21 +528,37 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     except:
         st.session_state['current_bill_no'] = "ARTH-0001"
 
-# 5. DOWNLOAD BUTTON DISPLAY FOR LAST GENERATED INVOICE
+# 5. DOWNLOAD BUTTON & WHATSAPP SHARE
 if st.session_state['last_generated_pdf'] and os.path.exists(st.session_state['last_generated_pdf']):
     st.markdown("---")
-    st.success(f"📥 Latest Generated Invoice Ready: **{st.session_state['last_bill_no']}**")
-    with open(st.session_state['last_generated_pdf'], "rb") as pdf_file:
-        st.download_button(
-            label=f"📥 Click Here to Download PDF ({st.session_state['last_bill_no']})",
-            data=pdf_file,
-            file_name=os.path.basename(st.session_state['last_generated_pdf']),
-            mime="application/pdf",
-            type="primary"
-        )
+    st.success(f"📥 Latest Generated Invoice Ready: **{st.session_state['last_bill_no']}** ({st.session_state['last_cust_name']})")
+    
+    dl_col1, dl_col2 = st.columns(2)
+    with dl_col1:
+        with open(st.session_state['last_generated_pdf'], "rb") as pdf_file:
+            st.download_button(
+                label=f"📥 Download PDF ({st.session_state['last_bill_no']})",
+                data=pdf_file,
+                file_name=os.path.basename(st.session_state['last_generated_pdf']),
+                mime="application/pdf",
+                type="primary"
+            )
+            
+    with dl_col2:
+        wa_msg = f"Hello {st.session_state['last_cust_name']}, Thank you for shopping with ARTH LIFE! Here is your invoice ({st.session_state['last_bill_no']}): {st.session_state['last_pdf_url']}"
+        encoded_wa_msg = urllib.parse.quote(wa_msg)
+        wa_link = f"https://wa.me/91{st.session_state['last_cust_mobile']}?text={encoded_wa_msg}"
+        
+        st.markdown(f"""
+            <a href="{wa_link}" target="_blank">
+                <button style="background-color: #25D366; color: white; border: none; border-radius: 8px; font-weight: bold; height: 48px; width: 100%; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
+                    💬 Send Bill via WhatsApp
+                </button>
+            </a>
+        """, unsafe_allow_html=True)
 
 if not (is_name_valid and is_mobile_valid):
-    st.warning("⚠️ Please enter a valid Customer Name (alphabets only) and a 10-digit Mobile Number to enable bill generation.")
+    st.warning("⚠️ Please enter a valid Customer Name and a 10-digit Mobile Number to enable bill generation.")
 
 # 8. LIVE DASHBOARDS FROM SUPABASE
 st.markdown("---")
