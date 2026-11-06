@@ -10,61 +10,70 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from supabase import create_client, Client
 
-# 1. Page Configuration & Professional Styling
+# 1. Page Configuration & Ultra-Modern Professional Styling
 st.set_page_config(page_title="ARTH LIFE - Exhibition Invoice Generator", page_icon="🛍️", layout="wide")
 
 st.markdown("""
     <style>
     .stApp {
-        background-color: #F4F7F6;
-        color: #2C3E50;
+        background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%);
+        color: #1E293B;
+        font-family: 'Inter', sans-serif;
     }
     .main-banner {
-        background: linear-gradient(135deg, #0077B6 0%, #00B4D8 100%);
-        padding: 20px;
-        border-radius: 10px;
+        background: linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%);
+        padding: 24px;
+        border-radius: 14px;
         text-align: center;
-        box-shadow: 0 4px 15px rgba(0, 119, 182, 0.2);
+        box-shadow: 0 10px 25px -5px rgba(14, 165, 233, 0.3);
         margin-bottom: 25px;
     }
     .banner-title {
-        font-size: 28px;
-        font-weight: 700;
+        font-size: 30px;
+        font-weight: 800;
         color: #FFFFFF;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.8px;
         margin: 0;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     .stTextInput>div>div>input {
         background-color: #FFFFFF;
-        color: #2C3E50;
-        border-radius: 8px;
-        border: 1px solid #CBD5E1;
+        color: #0F172A;
+        border-radius: 10px;
+        border: 1.5px solid #CBD5E1;
+        padding: 10px 14px;
+        font-weight: 500;
+    }
+    .stTextInput>div>div>input:focus {
+        border-color: #0EA5E9;
+        box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
     }
     .stButton>button {
-        background: linear-gradient(135deg, #0077B6 0%, #00B4D8 100%) !important;
+        background: linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%) !important;
         color: white !important;
         border: none !important;
-        border-radius: 8px !important;
-        font-weight: bold !important;
-        height: 48px !important;
-        box-shadow: 0 4px 10px rgba(0, 119, 182, 0.3);
+        border-radius: 10px !important;
+        font-weight: 700 !important;
+        height: 50px !important;
+        box-shadow: 0 4px 12px rgba(14, 165, 233, 0.35);
         transition: all 0.3s ease;
     }
     .stButton>button:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 15px rgba(0, 119, 182, 0.4);
+        box-shadow: 0 6px 18px rgba(14, 165, 233, 0.45);
     }
     [data-testid="stSidebar"] {
         background-color: #FFFFFF;
         border-right: 1px solid #E2E8F0;
+        box-shadow: 4px 0 15px rgba(0,0,0,0.02);
     }
     div[data-testid="stMetric"] {
         background-color: #FFFFFF;
-        padding: 15px;
-        border-radius: 10px;
+        padding: 18px;
+        border-radius: 12px;
         border: 1px solid #E2E8F0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        border-left: 5px solid #0077B6;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        border-left: 6px solid #0EA5E9;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -117,19 +126,17 @@ if 'last_cust_mobile' not in st.session_state:
 if 'bill_items' not in st.session_state:
     st.session_state['bill_items'] = []
 
-# Header Section with Logo & Title Banner
-col_logo1, col_logo2, col_logo3 = st.columns([1, 4, 1])
-with col_logo2:
-    if LOGO_FILE:
-        c_img1, c_img2, c_img3 = st.columns([2, 1, 2])
-        with c_img2:
-            st.image(LOGO_FILE, width=90)
+# Header Section with Wider Logo & Title Banner
+if LOGO_FILE:
+    c_img1, c_img2, c_img3 = st.columns([1, 2, 1])
+    with c_img2:
+        st.image(LOGO_FILE, width=220)
             
-    st.markdown("""
-        <div class="main-banner">
-            <p class="banner-title">🛍️ ARTH LIFE EXHIBITION INVOICE GENERATOR</p>
-        </div>
-    """, unsafe_allow_html=True)
+st.markdown("""
+    <div class="main-banner">
+        <p class="banner-title">🛍️ ARTH LIFE EXHIBITION INVOICE GENERATOR</p>
+    </div>
+""", unsafe_allow_html=True)
 
 # 3. Sidebar: Exhibition Setup & Admin Settings
 st.sidebar.header("🎪 Exhibition Setup & Switcher")
@@ -329,14 +336,14 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     company_style = ParagraphStyle('CompStyle', fontName='Helvetica-Bold', fontSize=12, textColor=colors.HexColor('#0077B6'), alignment=2)
     sub_company_style = ParagraphStyle('SubCompStyle', fontName='Helvetica', fontSize=9, textColor=colors.HexColor('#555555'), alignment=2)
     
-    # Header containing Logo (if available) and Invoice Details
+    # Header containing Logo (if available) and Invoice Details (Corrected widths so INVOICE fits in 1 line)
     if LOGO_FILE:
-        logo_img = RLImage(LOGO_FILE, width=50, height=50)
+        logo_img = RLImage(LOGO_FILE, width=60, height=60)
         header_table_data = [
             [logo_img, Paragraph(f"<b>{exhibition_name}</b>", company_style)],
             [Paragraph("<b>INVOICE</b>", inv_title_style), Paragraph(f"{exhibition_place}<br/><b>Payment:</b> {payment_status}", sub_company_style)]
         ]
-        header_table = Table(header_table_data, colWidths=[100, 410])
+        header_table = Table(header_table_data, colWidths=[120, 390])
     else:
         header_table_data = [
             [Paragraph("<b>INVOICE</b>", inv_title_style), Paragraph(f"<b>{exhibition_name}</b>", company_style)],
@@ -515,6 +522,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     st.session_state['last_cust_mobile'] = cust_mobile
     
     st.success("🎉 Bill saved & PDF uploaded to Supabase successfully!")
+    st.balloons()
     
     st.session_state['bill_items'] = []
     
