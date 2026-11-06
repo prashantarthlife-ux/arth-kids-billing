@@ -126,11 +126,11 @@ if 'last_cust_mobile' not in st.session_state:
 if 'bill_items' not in st.session_state:
     st.session_state['bill_items'] = []
 
-# Header Section with Default Logo Size & Title Banner
+# Header Section with Perfectly Centered Logo & Title Banner
 if LOGO_FILE:
-    c_img1, c_img2, c_img3 = st.columns([1, 1, 1])
+    c_img1, c_img2, c_img3 = st.columns([2, 1, 2])  # Balanced columns to center logo perfectly
     with c_img2:
-        st.image(LOGO_FILE, width=120)  # Default balanced size
+        st.image(LOGO_FILE, width=120)
             
 st.markdown("""
     <div class="main-banner">
@@ -336,7 +336,7 @@ if st.button("🚀 Save Bill & Generate PDF", type="primary", disabled=not (is_n
     company_style = ParagraphStyle('CompStyle', fontName='Helvetica-Bold', fontSize=12, textColor=colors.HexColor('#0077B6'), alignment=2)
     sub_company_style = ParagraphStyle('SubCompStyle', fontName='Helvetica', fontSize=9, textColor=colors.HexColor('#555555'), alignment=2)
     
-    # Header containing Logo and Invoice Details (Default size for PDF logo = 50x50)
+    # Header containing Logo and Invoice Details (Widths adjusted so INVOICE fits in 1 line)
     if LOGO_FILE:
         logo_img = RLImage(LOGO_FILE, width=50, height=50)
         header_table_data = [
