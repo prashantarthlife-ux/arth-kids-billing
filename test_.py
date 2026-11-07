@@ -277,6 +277,50 @@ def process_scan():
 
 st.text_input("🔍 Scan Barcode Here", placeholder="Scan tag or type barcode and press Enter...", key="scanner_input", on_change=process_scan, autocomplete="off")
 
+# ==========================================
+# MANUAL ACCESSORIES SECTION (NEW FEATURE)
+# ==========================================
+st.markdown("---")
+with st.expander("➕ Add Manual Accessories / Extra Items (Without Barcode)"):
+    acc_col1, acc_col2, acc_col3 = st.columns([2, 1, 1])
+    with acc_col1:
+        manual_acc_name = st.text_input("Accessory / Item Name", placeholder="e.g. Gift Box / Carry Bag")
+    with acc_col2:
+        manual_acc_price = st.number_input("Price (Rs.)", min_value=0.0, value=100.0, step=10.0)
+    with acc_col3:
+        manual_acc_qty = st.number_input("Quantity", min_value=1, value=1)
+    
+    if st.button("➕ Add Accessory to Bill"):
+        if manual_acc_name.strip() != "":
+            # Check if same manual item already exists in bill
+            acc_found = False
+            for item in st.session_state['bill_items']:
+                if item["product_name"].lower() == manual_acc_name.strip().lower() and item["barcode_id"] == "MANUAL":
+                    item["quantity"] += manual_acc_qty
+                    item["total"] = item["quantity"] * item["price"]
+                    acc_found = True
+                    break
+            
+            if not acc_found:
+                st.session_state['bill_items'].append({
+                    "bill_no": st.session_state['current_bill_no'],
+                    "customer_name": cust_name,
+                    "mobile_number": cust_mobile,
+                    "exhibition_name": exhibition_name,
+                    "location": exhibition_place,
+                    "sku": "ACC",
+                    "barcode_id": "MANUAL",
+                    "product_name": manual_acc_name.strip(),
+                    "size": "N/A",
+                    "price": manual_acc_price,
+                    "quantity": manual_acc_qty,
+                    "total": manual_acc_price * manual_acc_qty
+                })
+            st.success(f"✅ Added '{manual_acc_name}' successfully!")
+            st.rerun()
+        else:
+            st.warning("⚠️ Please enter a valid accessory name.")
+
 # 7. Active Bill Summary & Item Cancellation
 if st.session_state['bill_items']:
     st.markdown("---")
@@ -548,7 +592,6 @@ if st.session_state['last_generated_pdf'] and os.path.exists(st.session_state['l
     
     st.success(f"📥 Latest Generated Invoice Ready: **{st.session_state['last_bill_no']}** ({st.session_state['last_cust_name']})")
     
-    # App madhe clean Arth Life Invoices link dakhavne
     st.markdown(f"🔗 **Arth Life Invoices:** [{pdf_filename_only}]({st.session_state['last_pdf_url']})")
     
     dl_col1, dl_col2 = st.columns(2)
@@ -563,7 +606,6 @@ if st.session_state['last_generated_pdf'] and os.path.exists(st.session_state['l
             )
             
     with dl_col2:
-        # WhatsApp message madhe Arth Life Invoices ani clean format
         wa_msg = f"Hello {st.session_state['last_cust_name']}, Thank you for shopping with ARTH LIFE! 🛍️\n\nHere is your Arth Life Invoice (*{pdf_filename_only}*):\n{st.session_state['last_pdf_url']}"
         encoded_wa_msg = urllib.parse.quote(wa_msg)
         wa_link = f"https://wa.me/91{st.session_state['last_cust_mobile']}?text={encoded_wa_msg}"
