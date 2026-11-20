@@ -115,11 +115,32 @@ section[data-testid="stSidebar"] {
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. DATA LOADING & PREPROCESSING
+# 2. DATA LOADING & PREPROCESSING (AUTO-LOADS EXCEL FROM GITHUB REPO)
 # ==============================================================================
 DEFAULT_PATH = r"C:\Users\yasha\OneDrive\Desktop\New folder (4)\New folder (4)\New folder\PowerBI_Dimensional_Model_Ecommerce_2.2.xlsx"
 
-@st.cache_data
+def _find_repo_excel():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    search_dirs = [
+        script_dir,
+        os.path.join(script_dir, "data"),
+        os.path.join(script_dir, "Data"),
+        os.getcwd(),
+        os.path.join(os.getcwd(), "data"),
+    ]
+    for folder in search_dirs:
+        if folder and os.path.isdir(folder):
+            try:
+                for fn in sorted(os.listdir(folder)):
+                    if fn.lower().endswith(".xlsx") and "dimensional_model" in fn.lower():
+                        return os.path.abspath(os.path.join(folder, fn))
+            except Exception:
+                continue
+    if os.path.exists(DEFAULT_PATH):
+        return DEFAULT_PATH
+    return None
+
+@st.cache_data(show_spinner=False)
 def load_model(file_source):
     xls = pd.ExcelFile(file_source)
     orders = pd.read_excel(xls, sheet_name="Dim_Orders")
@@ -151,12 +172,17 @@ with st.sidebar:
     st.caption("Kids Fashion E-Commerce Analytics")
     st.divider()
 
-    uploaded = st.file_uploader("📂 Upload Model Excel (.xlsx)", type=["xlsx"])
-    local_matches = [f for f in os.listdir(".") if f.endswith(".xlsx") and "Dimensional_Model" in f] if os.path.exists(".") else []
-    source = uploaded if uploaded is not None else (DEFAULT_PATH if os.path.exists(DEFAULT_PATH) else (local_matches[0] if local_matches else None))
+    repo_excel = _find_repo_excel()
+    if repo_excel:
+        st.success(f"✅ Repo Excel loaded: `{os.path.basename(repo_excel)}`")
+
+    with st.expander("📤 Override Excel manually (Optional)"):
+        uploaded = st.file_uploader("Upload Model Excel (.xlsx)", type=["xlsx"])
+
+    source = uploaded if uploaded is not None else repo_excel
 
     if source is None:
-        st.warning("कृपया `PowerBI_Dimensional_Model_Ecommerce_2.2.xlsx` अपलोड करा.")
+        st.warning("कृपया GitHub रिपॉझिटरीमध्ये `PowerBI_Dimensional_Model_Ecommerce_2.2.xlsx` ठेवा किंवा वरून अपलोड करा.")
         st.stop()
 
     df_orders, df_disp, df_rev = load_model(source)
@@ -164,8 +190,8 @@ with st.sidebar:
     st.markdown("#### 📅 Analysis Date Window")
     default_start = datetime.date(2026, 10, 1)
     default_end = datetime.date(2026, 11, 5)
-    min_d = df_orders["Order_Date_dt"].min().date()
-    max_d = df_orders["Order_Date_dt"].max().date()
+    min_d = df_orders["Order_Date_dt"].dropna().min().date()
+    max_d = df_orders["Order_Date_dt"].dropna().max().date()
 
     start_date = st.date_input("Start Date", value=max(default_start, min_d), min_value=min_d, max_value=max_d)
     end_date = st.date_input("End Date", value=min(default_end, max_d), min_value=min_d, max_value=max_d)
