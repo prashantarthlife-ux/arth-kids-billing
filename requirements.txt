@@ -3,3 +3,6 @@ pandas
 openpyxl
 reportlab
 supabase
+numpy
+plotly
+openpyxl
