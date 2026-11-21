@@ -7,7 +7,7 @@ from plotly.subplots import make_subplots
 import streamlit as st
 
 # ==============================================================================
-# 1. PAGE CONFIG & EXECUTIVE SAAS STYLING
+# 1. PAGE CONFIG & ATTRACTIVE EXECUTIVE SAAS STYLING
 # ==============================================================================
 st.set_page_config(
     page_title="ARTH LIFE Kids Fashion — Shopify Analysis",
@@ -198,15 +198,33 @@ def load_model(file_source):
 
     return orders, disp, rev
 
-def _week_bucket(dt_val, start_d):
-    if pd.isna(dt_val):
-        return "Unknown"
-    d = dt_val.date() if isinstance(dt_val, pd.Timestamp) else dt_val
-    day_idx = max((d - start_d).days, 0)
-    w_num = (day_idx // 7) + 1
-    w_start = start_d + datetime.timedelta(days=(w_num - 1) * 7)
-    w_end = min(w_start + datetime.timedelta(days=6), d + datetime.timedelta(days=6))
-    return f"Week {w_num} ({w_start.strftime('%d %b')}–{w_end.strftime('%d %b')})"
+def _make_donut_fig(labels, values, colors, center_text):
+    fig = go.Figure(go.Pie(
+        labels=labels,
+        values=values,
+        hole=0.58,
+        textinfo="percent",
+        textposition="inside",
+        insidetextorientation="horizontal",
+        marker=dict(colors=colors[:len(labels)], line=dict(color="#FFFFFF", width=2.5)),
+        hovertemplate="<b>%{label}</b><br>Orders: %{value:,}<br>Share: %{percent}<extra></extra>"
+    ))
+    fig.update_layout(
+        height=370,
+        margin=dict(l=15, r=15, t=20, b=65),
+        paper_bgcolor="rgba(0,0,0,0)",
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.06,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=11.5, color="#1E293B")
+        ),
+        annotations=[dict(text=center_text, x=0.5, y=0.5, font_size=14, showarrow=False)]
+    )
+    return fig
 
 # Sidebar
 with st.sidebar:
@@ -256,7 +274,7 @@ with st.sidebar:
         init_start = min(max(datetime.date(2026, 10, 1), min_d), max_d)
         init_end = max(min(datetime.date(2026, 11, 5), max_d), min_d)
 
-    reg_col = _find_col(df_orders, ["Customer_Region", "Region", "Shipping_State", "State"])
+    reg_col = _find_col(df_orders, ["Customer_Region", "Region"])
     all_regions = sorted(df_orders[reg_col].dropna().astype(str).unique().tolist()) if reg_col else ["All"]
     sel_regions = st.multiselect("🌍 Filter Region", all_regions, default=all_regions)
 
@@ -284,7 +302,7 @@ st.markdown(f"""
 <div class="exec-banner">
     <div>
         <div class="exec-title">👗 ARTH LIFE Kids Fashion — Shopify Analysis</div>
-        <div class="exec-sub">Separate RTO & Exchange Analysis, Order Funnel, Gross/Net Revenue, Discount & Shipping</div>
+        <div class="exec-sub">Separate RTO & Exchange Sections, Day-Wise Trends, Region/State RTO & Financial KPIs</div>
     </div>
     <div class="exec-pill">📅 Created: {start_date.strftime('%d %b %Y')} — {end_date.strftime('%d %b %Y')}</div>
 </div>
@@ -310,6 +328,8 @@ period_ids = set(p_orders[base_oid_col].dropna()) if base_oid_col else set()
 
 disp_base_col = _find_col(df_disp, ["Base_Order_ID", "Order_ID"])
 p_disp = df_disp[df_disp[disp_base_col].isin(period_ids)].copy() if (not df_disp.empty and disp_base_col) else pd.DataFrame()
+
+state_col_ord = _find_col(p_orders, ["Shipping_State", "State"])
 
 if not p_disp.empty and base_oid_col:
     merge_cols = [base_oid_col, "Order_Date", "Order_Date_dt", "Payment_Category", "Order_Total"]
@@ -379,7 +399,7 @@ else:
     p_rev_cancelled = pd.DataFrame()
 
 # ==============================================================================
-# 5. KPI CALCULATIONS (STRICTLY NO EXCHANGE COUNT IN TOTAL RETURNS)
+# 5. KPI CALCULATIONS (DAX LOGIC + NO EXCHANGE COUNT IN TOTAL RETURNS)
 # ==============================================================================
 if not p_orders.empty and base_oid_col:
     p_orders_uniq = p_orders.drop_duplicates(subset=[base_oid_col]).copy()
@@ -392,8 +412,15 @@ gross_rev = float(p_orders_uniq["Order_Total"].sum()) if (len(p_orders_uniq) > 0
 tot_disc = float(p_orders_uniq["Discount"].sum()) if ("Discount" in p_orders_uniq.columns and len(p_orders_uniq) > 0) else 0.0
 tot_ship = float(p_orders_uniq["Shipping"].sum()) if ("Shipping" in p_orders_uniq.columns and len(p_orders_uniq) > 0) else 0.0
 
-rto_rev = float(p_orders_uniq[p_orders_uniq[base_oid_col].isin(rto_all_oids)]["Order_Total"].sum()) if (len(p_orders_uniq) > 0 and base_oid_col) else 0.0
-net_rev = max(gross_rev - rto_rev - tot_ship, 0.0)
+rto_order_ids_set = set(rto_all_oids)
+canc_exch_order_ids_set = set(p_rev_cancelled[rev_base_col].dropna()) if (not p_rev_cancelled.empty and rev_base_col) else set()
+all_affected_ret_oids = rto_order_ids_set.union(canc_exch_order_ids_set)
+
+tot_ret_amt = (
+    float(p_orders_uniq[p_orders_uniq[base_oid_col].isin(all_affected_ret_oids)]["Order_Total"].sum())
+    if (len(p_orders_uniq) > 0 and base_oid_col) else 0.0
+)
+net_rev = max(gross_rev - tot_ret_amt - tot_ship, 0.0)
 realized_deliv_rev = float(p_orders_uniq[p_orders_uniq[base_oid_col].isin(del_oids)]["Order_Total"].sum()) if (len(p_orders_uniq) > 0 and base_oid_col) else 0.0
 
 aov = gross_rev / tot_ord if tot_ord > 0 else 0.0
@@ -409,10 +436,8 @@ if not p_rev_active.empty and rev_order_id_col:
 else:
     exch_cnt = len(p_rev_active)
 
-# Total Returns excludes exchange count
 tot_ret_cnt = rto_cnt
 tot_ret_pct = (tot_ret_cnt / disp_cnt * 100) if disp_cnt > 0 else 0.0
-tot_ret_amt = rto_rev
 
 rto_hub_parcels = int(p_disp["RTO_Pending_Hub"].sum()) if not p_disp.empty else 0
 rto_hub_orders = len(rto_pending_hub_oids)
@@ -611,16 +636,17 @@ with tab2:
     s3.metric("Total RTO Orders", f"{rto_cnt:,}")
     s4.metric("Total Exchange Orders", f"{exch_cnt:,}")
 
+    # ================= SECTION 1: RTO ANALYSIS =================
     st.markdown("""
     <div class="sec-header-rto">
         <div class="sec-title">🚚 Section 1: RTO (Return-to-Origin) Analysis</div>
-        <div class="sec-sub">RTO Status Breakdown, Region/State-wise RTO Returns & Weekly RTO Trend (Excludes Exchange Count)</div>
+        <div class="sec-sub">RTO Status Donut, Region & State-wise RTO Returns & Day-Wise RTO Orders Trend</div>
     </div>
     """, unsafe_allow_html=True)
 
     rto_df = p_disp[p_disp["Is_RTO"]].copy() if (not p_disp.empty and "Is_RTO" in p_disp.columns) else pd.DataFrame()
 
-    rto_c1, rto_c2, rto_c3 = st.columns(3)
+    rto_c1, rto_c2, rto_c3 = st.columns([1.05, 1.1, 1.35])
     with rto_c1:
         st.markdown('<div class="card-box"><div class="card-title">🍩 RTO Status Breakdown (Donut)</div>', unsafe_allow_html=True)
         if not rto_df.empty and disp_base_col:
@@ -631,14 +657,11 @@ with tab2:
             else:
                 rto_st_agg = pd.DataFrame({"Status": ["RTO Pending Hub", "RTO Received Hub"], "Count": [rto_hub_orders, max(rto_cnt - rto_hub_orders, 0)]})
             rto_st_agg = rto_st_agg[rto_st_agg["Count"] > 0]
-            fig_rto_donut = go.Figure(go.Pie(
-                labels=rto_st_agg["Status"], values=rto_st_agg["Count"], hole=0.56,
-                textinfo="label+value+percent", textposition="outside",
-                marker=dict(colors=["#EF4444", "#F97316", "#F59E0B", "#DC2626", "#E11D48"], line=dict(color="#FFFFFF", width=2))
-            ))
-            fig_rto_donut.update_layout(
-                height=360, margin=dict(l=30, r=30, t=30, b=30), paper_bgcolor="rgba(0,0,0,0)",
-                showlegend=False, annotations=[dict(text=f"<b>{rto_cnt:,}</b><br>RTO", x=0.5, y=0.5, font_size=14, showarrow=False)]
+            fig_rto_donut = _make_donut_fig(
+                rto_st_agg["Status"].tolist(),
+                rto_st_agg["Count"].tolist(),
+                ["#EF4444", "#F97316", "#F59E0B", "#0EA5E9", "#8B5CF6", "#10B981"],
+                f"<b>{rto_cnt:,}</b><br>RTO"
             )
             st.plotly_chart(fig_rto_donut, use_container_width=True)
         else:
@@ -646,57 +669,72 @@ with tab2:
         st.markdown('</div>', unsafe_allow_html=True)
 
     with rto_c2:
-        st.markdown('<div class="card-box"><div class="card-title">🗺️ Region / State-wise RTO Returns</div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-box"><div class="card-title">🗺️ Region & State-wise RTO Returns</div>', unsafe_allow_html=True)
         if not rto_df.empty and disp_base_col:
-            geo_col = _find_col(rto_df, ["Shipping_State", "State", "Customer_Region", "Shipping_City"])
-            if geo_col:
-                geo_rto = rto_df.groupby(rto_df[geo_col].fillna("Unknown").astype(str).str.strip())[disp_base_col].nunique().reset_index(name="RTO_Orders").sort_values("RTO_Orders", ascending=True).tail(6)
-                fig_geo_rto = go.Figure(go.Bar(
-                    y=geo_rto[geo_col], x=geo_rto["RTO_Orders"], orientation="h",
-                    marker=dict(color="#0284C7", cornerradius=8),
-                    text=geo_rto["RTO_Orders"], textposition="outside", cliponaxis=False
-                ))
-                fig_geo_rto.update_layout(
-                    height=360, margin=dict(l=10, r=45, t=20, b=20), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                    xaxis=dict(showgrid=True, gridcolor="#F1F5F9", range=[0, max(float(geo_rto["RTO_Orders"].max()) * 1.28, 3.0)])
+            r_col_d = _find_col(rto_df, ["Customer_Region", "Region"])
+            s_col_d = _find_col(rto_df, ["Shipping_State", "State"])
+            if r_col_d and s_col_d:
+                rto_df["Region_State_Lbl"] = (
+                    rto_df[r_col_d].fillna("Unknown").astype(str).str.strip()
+                    + " — "
+                    + rto_df[s_col_d].fillna("Unknown").astype(str).str.strip()
                 )
-                st.plotly_chart(fig_geo_rto, use_container_width=True)
+                geo_rto = rto_df.groupby("Region_State_Lbl")[disp_base_col].nunique().reset_index(name="RTO_Orders").sort_values("RTO_Orders", ascending=True).tail(8)
+                y_lbl_col = "Region_State_Lbl"
+            else:
+                fallback_col = r_col_d or s_col_d or _find_col(rto_df, ["Shipping_City", "City"])
+                geo_rto = rto_df.groupby(rto_df[fallback_col].fillna("Unknown").astype(str).str.strip())[disp_base_col].nunique().reset_index(name="RTO_Orders").sort_values("RTO_Orders", ascending=True).tail(8)
+                y_lbl_col = fallback_col
+
+            fig_geo_rto = go.Figure(go.Bar(
+                y=geo_rto[y_lbl_col], x=geo_rto["RTO_Orders"], orientation="h",
+                marker=dict(color="#0284C7", cornerradius=8),
+                text=geo_rto["RTO_Orders"], textposition="outside", cliponaxis=False
+            ))
+            fig_geo_rto.update_layout(
+                height=370, margin=dict(l=10, r=45, t=20, b=20), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                xaxis=dict(showgrid=True, gridcolor="#F1F5F9", range=[0, max(float(geo_rto["RTO_Orders"].max()) * 1.28, 3.0)])
+            )
+            st.plotly_chart(fig_geo_rto, use_container_width=True)
         else:
-            st.info("No RTO geography data.")
+            st.info("No RTO region/state data.")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with rto_c3:
-        st.markdown('<div class="card-box"><div class="card-title">📆 Weekly RTO Return Analysis</div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-box"><div class="card-title">📅 Day-Wise RTO Orders Analysis</div>', unsafe_allow_html=True)
         if not rto_df.empty and "Order_Date_dt" in rto_df.columns and disp_base_col:
-            rto_df["Week_Lbl"] = rto_df["Order_Date_dt"].apply(lambda d: _week_bucket(d, start_date))
-            wk_rto = rto_df.groupby("Week_Lbl")[disp_base_col].nunique().reset_index(name="RTO_Count")
-            fig_wk_rto = go.Figure()
-            fig_wk_rto.add_trace(go.Bar(
-                x=wk_rto["Week_Lbl"], y=wk_rto["RTO_Count"], name="Weekly RTO",
-                marker=dict(color="#FB923C", cornerradius=8),
-                text=wk_rto["RTO_Count"], textposition="outside", cliponaxis=False
+            d_rto = rto_df.groupby(rto_df["Order_Date_dt"].dt.date)[disp_base_col].nunique().reset_index(name="RTO_Count").sort_values("Order_Date_dt")
+            d_rto["Date_Lbl"] = pd.to_datetime(d_rto["Order_Date_dt"]).dt.strftime("%d %b")
+            fig_d_rto = go.Figure()
+            fig_d_rto.add_trace(go.Bar(
+                x=d_rto["Date_Lbl"], y=d_rto["RTO_Count"], name="Day-Wise RTO",
+                marker=dict(color="#FB923C", cornerradius=6),
+                text=d_rto["RTO_Count"], textposition="outside", cliponaxis=False
             ))
-            fig_wk_rto.add_trace(go.Scatter(
-                x=wk_rto["Week_Lbl"], y=wk_rto["RTO_Count"], name="Trend",
+            fig_d_rto.add_trace(go.Scatter(
+                x=d_rto["Date_Lbl"], y=d_rto["RTO_Count"], name="Trend",
                 mode="lines+markers", line=dict(color="#EA580C", width=2.5, shape="spline")
             ))
-            fig_wk_rto.update_layout(
-                height=360, margin=dict(l=15, r=15, t=25, b=25), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                showlegend=False, yaxis=dict(showgrid=True, gridcolor="#F1F5F9", range=[0, max(float(wk_rto["RTO_Count"].max()) * 1.32, 3.0)])
+            fig_d_rto.update_layout(
+                height=370, margin=dict(l=15, r=15, t=25, b=55), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                showlegend=False,
+                xaxis=dict(tickangle=-45, nticks=18, showgrid=False),
+                yaxis=dict(showgrid=True, gridcolor="#F1F5F9", range=[0, max(float(d_rto["RTO_Count"].max()) * 1.32, 3.0)])
             )
-            st.plotly_chart(fig_wk_rto, use_container_width=True)
+            st.plotly_chart(fig_d_rto, use_container_width=True)
         else:
-            st.info("No weekly RTO data.")
+            st.info("No day-wise RTO data.")
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # ================= SECTION 2: EXCHANGE ANALYSIS (Reverse_Status) =================
     st.markdown("""
     <div class="sec-header-exch">
         <div class="sec-title">🔄 Section 2: Exchange Analysis (<code>Fact_Reverse_Logistics</code> — <code>Reverse_Status</code>)</div>
-        <div class="sec-sub">Exchanged Status by <code>Reverse_Status</code>, Weekly Exchange Orders & Reverse Logistics Table</div>
+        <div class="sec-sub">Exchanged Status by <code>Reverse_Status</code>, Day-Wise Exchange Orders & Reverse Logistics Table</div>
     </div>
     """, unsafe_allow_html=True)
 
-    ex_c1, ex_c2 = st.columns([1.1, 1.3])
+    ex_c1, ex_c2 = st.columns([1.05, 1.45])
     with ex_c1:
         st.markdown('<div class="card-box"><div class="card-title">🍩 Exchange Status by <code>Reverse_Status</code> (Donut)</div>', unsafe_allow_html=True)
         if not p_rev_all.empty:
@@ -711,14 +749,11 @@ with tab2:
                 ex_st_df = pd.DataFrame({"Reverse_Status": ["Recorded"], "Count": [len(p_rev_all)]})
             ex_st_df = ex_st_df[ex_st_df["Count"] > 0]
 
-            fig_ex_donut = go.Figure(go.Pie(
-                labels=ex_st_df["Reverse_Status"], values=ex_st_df["Count"], hole=0.56,
-                textinfo="label+value+percent", textposition="outside",
-                marker=dict(colors=["#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#0EA5E9", "#EC4899"], line=dict(color="#FFFFFF", width=2))
-            ))
-            fig_ex_donut.update_layout(
-                height=360, margin=dict(l=30, r=30, t=30, b=30), paper_bgcolor="rgba(0,0,0,0)",
-                showlegend=False, annotations=[dict(text=f"<b>{int(ex_st_df['Count'].sum()):,}</b><br>Status", x=0.5, y=0.5, font_size=14, showarrow=False)]
+            fig_ex_donut = _make_donut_fig(
+                ex_st_df["Reverse_Status"].tolist(),
+                ex_st_df["Count"].tolist(),
+                ["#10B981", "#8B5CF6", "#F59E0B", "#0EA5E9", "#EF4444", "#EC4899"],
+                f"<b>{int(ex_st_df['Count'].sum()):,}</b><br>Status"
             )
             st.plotly_chart(fig_ex_donut, use_container_width=True)
         else:
@@ -726,32 +761,34 @@ with tab2:
         st.markdown('</div>', unsafe_allow_html=True)
 
     with ex_c2:
-        st.markdown('<div class="card-box"><div class="card-title">📆 Weekly Exchange Orders Analysis (Non-Cancelled)</div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-box"><div class="card-title">📅 Day-Wise Exchange Orders Analysis (Non-Cancelled)</div>', unsafe_allow_html=True)
         if not p_rev_active.empty and rev_base_col:
-            rev_w = p_rev_active.merge(p_orders_uniq[[base_oid_col, "Order_Date_dt"]], left_on=rev_base_col, right_on=base_oid_col, how="left")
-            id_for_wk = rev_order_id_col if (rev_order_id_col and rev_order_id_col in rev_w.columns) else rev_base_col
-            if "Order_Date_dt" in rev_w.columns and rev_w["Order_Date_dt"].notna().any():
-                rev_w["Week_Lbl"] = rev_w["Order_Date_dt"].apply(lambda d: _week_bucket(d, start_date))
-                wk_ex = rev_w.groupby("Week_Lbl")[id_for_wk].nunique().reset_index(name="Exchange_Count")
+            rev_d = p_rev_active.merge(p_orders_uniq[[base_oid_col, "Order_Date_dt"]], left_on=rev_base_col, right_on=base_oid_col, how="left")
+            id_for_day = rev_order_id_col if (rev_order_id_col and rev_order_id_col in rev_d.columns) else rev_base_col
+            if "Order_Date_dt" in rev_d.columns and rev_d["Order_Date_dt"].notna().any():
+                d_ex = rev_d.groupby(rev_d["Order_Date_dt"].dt.date)[id_for_day].nunique().reset_index(name="Exchange_Count").sort_values("Order_Date_dt")
+                d_ex["Date_Lbl"] = pd.to_datetime(d_ex["Order_Date_dt"]).dt.strftime("%d %b")
+                fig_d_ex = go.Figure()
+                fig_d_ex.add_trace(go.Bar(
+                    x=d_ex["Date_Lbl"], y=d_ex["Exchange_Count"], name="Day-Wise Exchanges",
+                    marker=dict(color="#A855F7", cornerradius=6),
+                    text=d_ex["Exchange_Count"], textposition="outside", cliponaxis=False
+                ))
+                fig_d_ex.add_trace(go.Scatter(
+                    x=d_ex["Date_Lbl"], y=d_ex["Exchange_Count"], name="Trend",
+                    mode="lines+markers", line=dict(color="#7C3AED", width=2.5, shape="spline")
+                ))
+                fig_d_ex.update_layout(
+                    height=370, margin=dict(l=15, r=15, t=25, b=55), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    showlegend=False,
+                    xaxis=dict(tickangle=-45, nticks=18, showgrid=False),
+                    yaxis=dict(showgrid=True, gridcolor="#F1F5F9", range=[0, max(float(d_ex["Exchange_Count"].max()) * 1.32, 3.0)])
+                )
+                st.plotly_chart(fig_d_ex, use_container_width=True)
             else:
-                wk_ex = pd.DataFrame({"Week_Lbl": [f"Week 1 ({start_date.strftime('%d %b')})"], "Exchange_Count": [exch_cnt]})
-            fig_wk_ex = go.Figure()
-            fig_wk_ex.add_trace(go.Bar(
-                x=wk_ex["Week_Lbl"], y=wk_ex["Exchange_Count"], name="Weekly Exchanges",
-                marker=dict(color="#A855F7", cornerradius=8),
-                text=wk_ex["Exchange_Count"], textposition="outside", cliponaxis=False
-            ))
-            fig_wk_ex.add_trace(go.Scatter(
-                x=wk_ex["Week_Lbl"], y=wk_ex["Exchange_Count"], name="Trend",
-                mode="lines+markers", line=dict(color="#7C3AED", width=2.5, shape="spline")
-            ))
-            fig_wk_ex.update_layout(
-                height=360, margin=dict(l=15, r=15, t=25, b=25), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                showlegend=False, yaxis=dict(showgrid=True, gridcolor="#F1F5F9", range=[0, max(float(wk_ex["Exchange_Count"].max()) * 1.32, 3.0)])
-            )
-            st.plotly_chart(fig_wk_ex, use_container_width=True)
+                st.info("No dated exchange records in selected period.")
         else:
-            st.info("No weekly exchange data in selected period.")
+            st.info("No day-wise exchange data in selected period.")
         st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown(f"#### 🔄 Exchanges Detail (<code>Fact_Reverse_Logistics</code> — Active Exchange Orders: {exch_cnt:,})")
@@ -803,11 +840,23 @@ with tab3:
 
     g1, g2 = st.columns([1, 1.3])
     with g1:
-        st.markdown('<div class="card-box"><div class="card-title">🗺️ Unique Orders by Region</div>', unsafe_allow_html=True)
-        if reg_col and base_oid_col:
+        st.markdown('<div class="card-box"><div class="card-title">🗺️ Unique Orders by Region & State</div>', unsafe_allow_html=True)
+        if reg_col and state_col_ord and base_oid_col:
+            p_orders["Reg_St"] = p_orders[reg_col].fillna("Unknown").astype(str).str.strip() + " — " + p_orders[state_col_ord].fillna("Unknown").astype(str).str.strip()
+            reg_agg = p_orders.groupby("Reg_St")[base_oid_col].nunique().reset_index(name="Orders").sort_values("Orders", ascending=False).head(7)
+            fig_reg = _make_donut_fig(
+                reg_agg["Reg_St"].tolist(), reg_agg["Orders"].tolist(),
+                ["#4F46E5", "#EC4899", "#10B981", "#F59E0B", "#0EA5E9", "#8B5CF6", "#F97316"],
+                f"<b>{int(reg_agg['Orders'].sum()):,}</b><br>Orders"
+            )
+            st.plotly_chart(fig_reg, use_container_width=True)
+        elif reg_col and base_oid_col:
             reg_agg = p_orders.groupby(reg_col)[base_oid_col].nunique().reset_index(name="Orders").sort_values("Orders", ascending=False)
-            fig_reg = go.Figure(go.Pie(labels=reg_agg[reg_col], values=reg_agg["Orders"], hole=0.52, textinfo="label+value+percent", marker=dict(colors=["#4F46E5", "#EC4899", "#10B981", "#F59E0B", "#0EA5E9", "#8B5CF6"])))
-            fig_reg.update_layout(height=320, margin=dict(l=20, r=20, t=15, b=15), paper_bgcolor="rgba(0,0,0,0)", showlegend=False)
+            fig_reg = _make_donut_fig(
+                reg_agg[reg_col].tolist(), reg_agg["Orders"].tolist(),
+                ["#4F46E5", "#EC4899", "#10B981", "#F59E0B", "#0EA5E9", "#8B5CF6"],
+                f"<b>{int(reg_agg['Orders'].sum()):,}</b><br>Orders"
+            )
             st.plotly_chart(fig_reg, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -820,7 +869,7 @@ with tab3:
                 y=city_agg[city_col][::-1], x=city_agg["Orders"][::-1], orientation="h",
                 marker=dict(color="#0EA5E9", cornerradius=8), text=city_agg["Orders"][::-1], textposition="outside", cliponaxis=False
             ))
-            fig_city.update_layout(height=320, margin=dict(l=10, r=45, t=15, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(showgrid=True, gridcolor="#F1F5F9", range=[0, max(float(city_agg["Orders"].max()) * 1.25, 3.0)]))
+            fig_city.update_layout(height=370, margin=dict(l=10, r=45, t=15, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(showgrid=True, gridcolor="#F1F5F9", range=[0, max(float(city_agg["Orders"].max()) * 1.25, 3.0)]))
             st.plotly_chart(fig_city, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
