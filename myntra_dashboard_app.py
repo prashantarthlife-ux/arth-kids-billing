@@ -43,7 +43,6 @@ section[data-testid="stSidebar"] {
     border-right: 1px solid #E6EAF2;
 }
 
-/* Login Card */
 .login-wrap {
     max-width: 440px;
     margin: 56px auto 18px auto;
@@ -70,7 +69,6 @@ section[data-testid="stSidebar"] {
 .login-title { font-size: 22px; font-weight: 800; color: #0F172A; margin: 0; }
 .login-sub   { font-size: 13px; color: #64748B; margin-top: 5px; margin-bottom: 12px; }
 
-/* Executive Banner */
 .exec-banner {
     background: linear-gradient(135deg, #0F172A 0%, #831843 55%, #7C3AED 100%);
     border-radius: 22px;
@@ -95,7 +93,6 @@ section[data-testid="stSidebar"] {
     white-space: nowrap;
 }
 
-/* Section Headers */
 .sec-header-rto {
     background: linear-gradient(90deg, #FFF1F2 0%, #FFFFFF 100%);
     border-left: 5px solid #EF4444;
@@ -121,7 +118,6 @@ section[data-testid="stSidebar"] {
 .sec-title { font-size: 18px; font-weight: 800; color: #0F172A; margin: 0; }
 .sec-sub   { font-size: 12.5px; color: #64748B; margin-top: 2px; }
 
-/* KPI Cards */
 .kpi-card {
     background: #FFFFFF;
     border-radius: 18px;
@@ -258,7 +254,7 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # ==============================================================================
-# 4. DATA DISCOVERY & PREPROCESSING (Myntra_Consolidated_Orders.xlsx + UPLOAD)
+# 4. DATA DISCOVERY & PREPROCESSING (Myntra_Consolidated_Orders.xlsx + CSV)
 # ==============================================================================
 CONSOLIDATED_XLSX_NAME = "Myntra_Consolidated_Orders.xlsx"
 
@@ -274,14 +270,12 @@ def _find_myntra_sources():
     ]
     found = []
     seen = set()
-
     for folder in search_dirs:
         if folder and os.path.isdir(folder):
             exact_xlsx = os.path.abspath(os.path.join(folder, CONSOLIDATED_XLSX_NAME))
             if os.path.isfile(exact_xlsx) and exact_xlsx not in seen:
                 seen.add(exact_xlsx)
                 found.append(exact_xlsx)
-
     for folder in search_dirs:
         if folder and os.path.isdir(folder):
             for pat in ["*myntra*.xlsx", "part-*.csv", "*myntra*.csv"]:
@@ -312,6 +306,23 @@ def _read_single_source(src):
             return pd.read_excel(xls, sheet_name=sheet), src.name
         return pd.read_csv(src, low_memory=False), src.name
 
+def _build_combined_status(s_val, r_val):
+    sl = str(s_val or "").strip().lower()
+    rl = str(r_val or "").strip().lower()
+    s_clean = str(s_val or "").strip()
+    r_clean = str(r_val or "").strip()
+    if sl == "delivered" and r_clean == "":
+        return "Delivered (No Return)"
+    if rl == "return_refund":
+        return f"Customer Return ({s_clean or 'Unknown'})"
+    if rl == "release_rto_refund":
+        return f"RTO ({s_clean or 'Unknown'})"
+    if rl == "exchange":
+        return f"Exchange ({s_clean or 'Unknown'})"
+    if r_clean != "":
+        return f"{s_clean or 'Unknown'} | {r_clean}"
+    return s_clean or "Unknown"
+
 @st.cache_data(show_spinner=False)
 def load_myntra_data(file_paths, uploaded_files):
     frames = []
@@ -340,22 +351,19 @@ def load_myntra_data(file_paths, uploaded_files):
     if not frames:
         return pd.DataFrame(), []
 
-    df = pd.concat(frames, ignore_index=True)
-    df = df.drop_duplicates().copy()
+    df = pd.concat(frames, ignore_index=True).drop_duplicates().copy()
 
     df["order_date_dt"] = pd.to_datetime(df.get("order_date", pd.Series(dtype=str)), format="mixed", errors="coerce")
     if df["order_date_dt"].dt.tz is not None:
         df["order_date_dt"] = df["order_date_dt"].dt.tz_convert("Asia/Kolkata").dt.tz_localize(None)
+    df["Order_Create_Date"] = df["order_date_dt"].dt.date
 
     df["packing_date_dt"] = pd.to_datetime(df.get("packing_date", pd.Series(dtype=str)), format="mixed", errors="coerce")
     if df["packing_date_dt"].dt.tz is not None:
         df["packing_date_dt"] = df["packing_date_dt"].dt.tz_convert("Asia/Kolkata").dt.tz_localize(None)
 
     for c in ["seller_paid_amount", "Total_Customer_Paid", "mrp", "discount_amount", "delivery_charges"]:
-        if c in df.columns:
-            df[c] = _to_num(df[c])
-        else:
-            df[c] = 0.0
+        df[c] = _to_num(df[c]) if c in df.columns else 0.0
 
     if "order_number" in df.columns and df["order_number"].notna().any():
         df["Unique_Order_Key"] = df["order_number"].astype(str).str.strip()
@@ -364,23 +372,18 @@ def load_myntra_data(file_paths, uploaded_files):
     else:
         df["Unique_Order_Key"] = df.index.astype(str)
 
-    st_u = df.get("order_item_status", pd.Series([""] * len(df))).fillna("").astype(str).str.strip().str.lower()
-    rt_l = df.get("return_type", pd.Series([""] * len(df))).fillna("").astype(str).str.strip().str.lower()
-    rst_u = df.get("return_status", pd.Series(["UNKNOWN"] * len(df))).fillna("UNKNOWN").astype(str).str.strip().str.upper()
-    rst_u = rst_u.replace("", "UNKNOWN")
+    raw_ois = df.get("order_item_status", pd.Series([""] * len(df))).fillna("").astype(str).str.strip()
+    raw_rt = df.get("return_type", pd.Series([""] * len(df))).fillna("").astype(str).str.strip()
+    rst_u = df.get("return_status", pd.Series(["UNKNOWN"] * len(df))).fillna("UNKNOWN").astype(str).str.strip().str.upper().replace("", "UNKNOWN")
 
-    df["Status_Clean"] = st_u
-    df["Return_Type_Clean"] = rt_l
+    df["Status_Clean"] = raw_ois.str.lower()
+    df["Return_Type_Clean"] = raw_rt.str.lower()
     df["Reverse_Status_Clean"] = rst_u
+    df["Combined_Status"] = [_build_combined_status(a, b) for a, b in zip(raw_ois, raw_rt)]
 
-    df["State_Clean"] = df.get("customer_state", pd.Series(["Unknown"] * len(df))).fillna("Unknown").astype(str).str.strip()
-    df["State_Clean"] = df["State_Clean"].replace("", "Unknown")
-
-    df["Article_Clean"] = df.get("article_type", pd.Series(["Unknown"] * len(df))).fillna("Unknown").astype(str).str.strip()
-    df["Article_Clean"] = df["Article_Clean"].replace("", "Unknown")
-
-    df["SKU_Clean"] = df.get("product_sku_code", pd.Series(["Unknown"] * len(df))).fillna("Unknown").astype(str).str.strip()
-    df["SKU_Clean"] = df["SKU_Clean"].replace("", "Unknown")
+    df["State_Clean"] = df.get("customer_state", pd.Series(["Unknown"] * len(df))).fillna("Unknown").astype(str).str.strip().replace("", "Unknown")
+    df["Article_Clean"] = df.get("article_type", pd.Series(["Unknown"] * len(df))).fillna("Unknown").astype(str).str.strip().replace("", "Unknown")
+    df["SKU_Clean"] = df.get("product_sku_code", pd.Series(["Unknown"] * len(df))).fillna("Unknown").astype(str).str.strip().replace("", "Unknown")
 
     return df, sorted(list(dict.fromkeys(loaded_names)))
 
@@ -400,14 +403,14 @@ with st.sidebar:
         st.rerun()
     st.divider()
 
-    repo_csvs = _find_myntra_sources()
-    if repo_csvs:
-        st.success(f"✅ Loaded {len(repo_csvs)} Myntra source(s) from repo")
+    repo_sources = _find_myntra_sources()
+    if repo_sources:
+        st.success(f"✅ Loaded {len(repo_sources)} Myntra source(s) from repo")
 
-    with st.expander("📤 Upload Myntra CSV / Excel"):
-        uploaded_files = st.file_uploader("Upload Myntra_Consolidated_Orders.xlsx / CSV", type=["csv", "xlsx"], accept_multiple_files=True)
+    with st.expander("📤 Upload Myntra_Consolidated_Orders.xlsx / CSV"):
+        uploaded_files = st.file_uploader("Upload Excel or CSV", type=["xlsx", "csv"], accept_multiple_files=True)
 
-    df_all, loaded_file_names = load_myntra_data(repo_csvs, uploaded_files)
+    df_all, loaded_file_names = load_myntra_data(repo_sources, uploaded_files)
 
     if df_all.empty:
         st.warning("कृपया GitHub रिपॉझिटरीमध्ये `Myntra_Consolidated_Orders.xlsx` ठेवा किंवा वरून अपलोड करा.")
@@ -440,6 +443,9 @@ with st.sidebar:
     all_states = sorted(df_all["State_Clean"].unique().tolist())
     sel_states = st.multiselect("🗺️ Filter Customer State", all_states, default=all_states)
 
+    all_comb_statuses = sorted(df_all["Combined_Status"].unique().tolist())
+    sel_comb_statuses = st.multiselect("🔀 Combined Status (order_item_status + return_type)", all_comb_statuses, default=all_comb_statuses)
+
 # ==============================================================================
 # 5. TOP BANNER & UNIFIED DATE SELECTION BAR
 # ==============================================================================
@@ -451,7 +457,7 @@ with ds_col2:
 with ds_col3:
     st.markdown(
         f"<div style='padding-top:28px; font-size:13px; color:#475569;'>"
-        f"<b>Orders Created Window:</b> {start_date.strftime('%d %b %Y')} — {end_date.strftime('%d %b %Y')} "
+        f"<b>Orders Created Window (order_date):</b> {start_date.strftime('%d %b %Y')} — {end_date.strftime('%d %b %Y')} "
         f"(Available: {min_d.strftime('%d %b %Y')} to {max_d.strftime('%d %b %Y')})</div>",
         unsafe_allow_html=True
     )
@@ -474,12 +480,13 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 6. FILTER BY SELECTED ORDER CREATED DATE & STATE (SINGLE PASS)
+# 6. FILTER BY SELECTED ORDER CREATED DATE, STATE & COMBINED STATUS
 # ==============================================================================
 p_df = df_all[
     (df_all["order_date_dt"].dt.date >= start_date) &
     (df_all["order_date_dt"].dt.date <= end_date) &
-    (df_all["State_Clean"].isin(sel_states))
+    (df_all["State_Clean"].isin(sel_states)) &
+    (df_all["Combined_Status"].isin(sel_comb_statuses))
 ].copy()
 
 if p_df.empty:
@@ -487,12 +494,12 @@ if p_df.empty:
     st.stop()
 
 # ==============================================================================
-# 7. KPI CALCULATIONS (EXACT COUNTS & seller_paid_amount REVENUE)
+# 7. KPI CALCULATIONS (UNIQUE COUNTS & seller_paid_amount REVENUE)
 # ==============================================================================
 tot_ord = int(p_df["Unique_Order_Key"].nunique())
 tot_rows = len(p_df)
 
-has_pack = p_df["packing_date_dt"].notna()
+has_pack = p_df["packing_date_dt"].notna() if "packing_date_dt" in p_df.columns else pd.Series([False]*len(p_df))
 has_inv = (p_df["invoice_number"].fillna("").astype(str).str.strip() != "") if "invoice_number" in p_df.columns else pd.Series([False]*len(p_df))
 is_disp_mask = has_pack | has_inv | p_df["Status_Clean"].isin(["delivered", "in_transit", "reverse_in_transit", "shipped"])
 disp_cnt = int(p_df[is_disp_mask]["Unique_Order_Key"].nunique()) if is_disp_mask.any() else 0
@@ -525,7 +532,6 @@ aov = seller_rev / tot_ord if tot_ord > 0 else 0.0
 rto_pct = (rto_cnt / max(disp_cnt, 1) * 100) if disp_cnt > 0 else 0.0
 cust_ret_pct = (cust_ret_cnt / max(disp_cnt, 1) * 100) if disp_cnt > 0 else 0.0
 
-# Row 1: 5 Core Requested KPIs
 k1, k2, k3, k4, k5 = st.columns(5)
 with k1:
     st.markdown(f"""
@@ -588,7 +594,7 @@ st.markdown("<div style='height:18px;'></div>", unsafe_allow_html=True)
 # 8. PRESENTATION TABS
 # ==============================================================================
 tab1, tab2, tab3, tab4 = st.tabs([
-    "📈 Overview & Daily Trend",
+    "📈 Overview & Combined Status",
     "↩️ RTO & Customer Returns",
     "👗 Article Types, SKUs & States",
     "📋 Orders Table & Download"
@@ -597,7 +603,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     c_left, c_right = st.columns([1.85, 1.15])
     with c_left:
-        st.markdown('<div class="card-box"><div class="card-title">📊 Daily Unique Orders & Seller Paid Revenue</div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-box"><div class="card-title">📊 Daily Unique Orders & Seller Paid Revenue Trend</div>', unsafe_allow_html=True)
         p_df["Order_Date_Only"] = p_df["order_date_dt"].dt.date
         daily = p_df.groupby("Order_Date_Only").agg(
             Orders=("Unique_Order_Key", "nunique"),
@@ -645,6 +651,31 @@ with tab1:
         fig_dual.update_yaxes(title_text="Unique Orders", range=[0, max_ord_y], showgrid=True, gridcolor="#F1F5F9", zeroline=False, secondary_y=False)
         fig_dual.update_yaxes(title_text="Revenue (₹ Lakhs)", range=[0, max_rev_y], showgrid=False, zeroline=False, secondary_y=True)
         st.plotly_chart(fig_dual, use_container_width=True)
+
+        st.markdown('<div style="font-size:14px; font-weight:700; color:#0F172A; margin-top:14px; margin-bottom:8px;">🔀 Combined Status (order_item_status + return_type)</div>', unsafe_allow_html=True)
+        comb_tbl = p_df.groupby("Combined_Status").agg(
+            Unique_Orders=("Unique_Order_Key", "nunique"),
+            Item_Rows=("Unique_Order_Key", "count"),
+            Seller_Paid_INR=("seller_paid_amount", "sum")
+        ).reset_index().sort_values("Unique_Orders", ascending=False)
+        comb_tbl["Seller_Paid_INR"] = comb_tbl["Seller_Paid_INR"].round(2)
+
+        fig_comb = go.Figure(go.Bar(
+            y=comb_tbl["Combined_Status"][::-1],
+            x=comb_tbl["Unique_Orders"][::-1],
+            orientation="h",
+            marker=dict(color="#7C3AED", cornerradius=8),
+            text=comb_tbl["Unique_Orders"][::-1],
+            textposition="outside",
+            cliponaxis=False
+        ))
+        fig_comb.update_layout(
+            height=260, margin=dict(l=10, r=45, t=15, b=15),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(showgrid=True, gridcolor="#F1F5F9", range=[0, max(float(comb_tbl["Unique_Orders"].max()) * 1.25, 3.0)])
+        )
+        st.plotly_chart(fig_comb, use_container_width=True)
+        st.dataframe(comb_tbl, use_container_width=True, height=200, hide_index=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     with c_right:
@@ -726,7 +757,7 @@ with tab2:
         st.markdown('</div>', unsafe_allow_html=True)
 
     with cc2:
-        st.markdown('<div class="card-box"><div class="card-title">🔄 Exchanges Summary</div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-box"><div class="card-title">🔄 Exchanges & Net Seller Paid Summary</div>', unsafe_allow_html=True)
         st.metric("Exchange Orders (Unique)", f"{exch_cnt:,}")
         st.metric("Exchange seller_paid_amount", f"₹{float(exch_df['seller_paid_amount'].sum()) if not exch_df.empty else 0.0:,.2f}")
         st.metric("Net Seller Paid Revenue (After RTO & Cust Ret)", f"₹{net_seller_rev:,.2f}")
@@ -754,6 +785,6 @@ with tab3:
 
 with tab4:
     st.markdown(f"#### 📋 Filtered Myntra Orders ({tot_ord:,} Unique Orders / {tot_rows:,} Rows)")
-    tbl_cols = [c for c in ["order_number", "sale_order_code", "order_date", "order_item_status", "return_type", "return_status", "product_sku_code", "article_type", "customer_state", "seller_paid_amount", "discount_amount", "delivery_charges"] if c in p_df.columns]
+    tbl_cols = [c for c in ["order_number", "sale_order_code", "Order_Create_Date", "order_date", "order_item_status", "return_type", "Combined_Status", "return_status", "product_sku_code", "article_type", "customer_state", "seller_paid_amount", "discount_amount", "delivery_charges"] if c in p_df.columns]
     st.dataframe(p_df[tbl_cols], use_container_width=True, height=360, hide_index=True)
     st.download_button("⬇️ Download Filtered Myntra Data CSV", p_df[tbl_cols].to_csv(index=False).encode("utf-8"), f"myntra_analysis_{start_date}_{end_date}.csv", "text/csv")
