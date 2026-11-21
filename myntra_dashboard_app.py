@@ -273,9 +273,11 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # ==============================================================================
-# 4. DATA DISCOVERY & PREPROCESSING (MYNTRA PART-*.CSV FILES + UPLOAD)
+# 4. DATA DISCOVERY & PREPROCESSING (Myntra_Consolidated_Orders.xlsx + UPLOAD)
 # ==============================================================================
-def _find_myntra_csvs():
+CONSOLIDATED_XLSX_NAME = "Myntra_Consolidated_Orders.xlsx"
+
+def _find_myntra_sources():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     search_dirs = [
         script_dir,
@@ -287,13 +289,20 @@ def _find_myntra_csvs():
     ]
     found = []
     seen = set()
+
     for folder in search_dirs:
         if folder and os.path.isdir(folder):
-            for pat in ["part-*.csv", "*myntra*.csv", "*.csv"]:
+            exact_xlsx = os.path.abspath(os.path.join(folder, CONSOLIDATED_XLSX_NAME))
+            if os.path.isfile(exact_xlsx) and exact_xlsx not in seen:
+                seen.add(exact_xlsx)
+                found.append(exact_xlsx)
+
+    for folder in search_dirs:
+        if folder and os.path.isdir(folder):
+            for pat in ["*myntra*.xlsx", "part-*.csv", "*myntra*.csv"]:
                 for fp in sorted(glob.glob(os.path.join(folder, pat))):
                     afp = os.path.abspath(fp)
-                    bn = os.path.basename(afp).lower()
-                    if afp not in seen and ("part-" in bn or "myntra" in bn):
+                    if afp not in seen:
                         seen.add(afp)
                         found.append(afp)
     return found
@@ -301,6 +310,22 @@ def _find_myntra_csvs():
 def _to_num(series: pd.Series) -> pd.Series:
     cleaned = series.astype(str).str.replace(",", "", regex=False).str.replace("₹", "", regex=False).str.strip()
     return pd.to_numeric(cleaned, errors="coerce").fillna(0.0)
+
+def _read_single_source(src):
+    if isinstance(src, str):
+        low = src.lower()
+        if low.endswith(".xlsx") or low.endswith(".xls"):
+            xls = pd.ExcelFile(src)
+            sheet = "Myntra_All_Orders" if "Myntra_All_Orders" in xls.sheet_names else xls.sheet_names[0]
+            return pd.read_excel(xls, sheet_name=sheet), os.path.basename(src)
+        return pd.read_csv(src, low_memory=False), os.path.basename(src)
+    else:
+        low = src.name.lower()
+        if low.endswith(".xlsx") or low.endswith(".xls"):
+            xls = pd.ExcelFile(src)
+            sheet = "Myntra_All_Orders" if "Myntra_All_Orders" in xls.sheet_names else xls.sheet_names[0]
+            return pd.read_excel(xls, sheet_name=sheet), src.name
+        return pd.read_csv(src, low_memory=False), src.name
 
 @st.cache_data(show_spinner=False)
 def load_myntra_data(file_paths, uploaded_files):
@@ -310,23 +335,20 @@ def load_myntra_data(file_paths, uploaded_files):
     if file_paths:
         for fp in file_paths:
             try:
-                tmp = pd.read_csv(fp, low_memory=False)
-                tmp["_source_file"] = os.path.basename(fp)
+                tmp, nm = _read_single_source(fp)
+                tmp["_source_file"] = nm
                 frames.append(tmp)
-                loaded_names.append(os.path.basename(fp))
+                loaded_names.append(nm)
             except Exception:
                 continue
 
     if uploaded_files:
         for uf in uploaded_files:
             try:
-                if uf.name.lower().endswith(".csv"):
-                    tmp = pd.read_csv(uf, low_memory=False)
-                else:
-                    tmp = pd.read_excel(uf)
-                tmp["_source_file"] = uf.name
+                tmp, nm = _read_single_source(uf)
+                tmp["_source_file"] = nm
                 frames.append(tmp)
-                loaded_names.append(uf.name)
+                loaded_names.append(nm)
             except Exception:
                 continue
 
@@ -412,17 +434,17 @@ with st.sidebar:
         st.rerun()
     st.divider()
 
-    repo_csvs = _find_myntra_csvs()
+    repo_csvs = _find_myntra_sources()
     if repo_csvs:
-        st.success(f"✅ Loaded {len(repo_csvs)} Myntra file(s) from repo")
+        st.success(f"✅ Loaded {len(repo_csvs)} Myntra source(s) from repo")
 
     with st.expander("📤 Upload Myntra CSV / Excel"):
-        uploaded_files = st.file_uploader("Upload part-*.csv / Myntra files", type=["csv", "xlsx"], accept_multiple_files=True)
+        uploaded_files = st.file_uploader("Upload Myntra_Consolidated_Orders.xlsx / CSV", type=["csv", "xlsx"], accept_multiple_files=True)
 
     df_all, loaded_file_names = load_myntra_data(repo_csvs, uploaded_files)
 
     if df_all.empty:
-        st.warning("कृपया GitHub रिपॉझिटरीमध्ये Myntra CSV फाईल्स (`part-*.csv`) ठेवा किंवा वरून अपलोड करा.")
+        st.warning("कृपया GitHub रिपॉझिटरीमध्ये `Myntra_Consolidated_Orders.xlsx` ठेवा किंवा वरून अपलोड करा.")
         st.stop()
 
     valid_dates = df_all["order_date_dt"].dropna()
