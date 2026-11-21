@@ -1,4 +1,5 @@
 import os
+import base64
 import datetime
 import numpy as np
 import pandas as pd
@@ -44,19 +45,19 @@ section[data-testid="stSidebar"] {
 /* Login Card Styling */
 .login-wrap {
     max-width: 440px;
-    margin: 60px auto 20px auto;
+    margin: 56px auto 18px auto;
     background: #FFFFFF;
     border-radius: 24px;
-    padding: 36px 34px;
+    padding: 34px 32px;
     box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
     border: 1px solid #E6EAF2;
     text-align: center;
 }
 .login-badge {
-    width: 68px;
-    height: 68px;
+    width: 72px;
+    height: 72px;
     margin: 0 auto 14px auto;
-    border-radius: 20px;
+    border-radius: 50%;
     background: linear-gradient(135deg, #312E81 0%, #7C3AED 100%);
     color: #FFFFFF;
     font-size: 34px;
@@ -66,7 +67,7 @@ section[data-testid="stSidebar"] {
     box-shadow: 0 10px 22px rgba(124, 58, 237, 0.25);
 }
 .login-title { font-size: 22px; font-weight: 800; color: #0F172A; margin: 0; }
-.login-sub   { font-size: 13px; color: #64748B; margin-top: 5px; margin-bottom: 18px; }
+.login-sub   { font-size: 13px; color: #64748B; margin-top: 5px; margin-bottom: 12px; }
 
 /* Executive Banner */
 .exec-banner {
@@ -79,6 +80,7 @@ section[data-testid="stSidebar"] {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 16px;
 }
 .exec-title { font-size: 25px; font-weight: 800; letter-spacing: -0.5px; margin: 0; }
 .exec-sub   { font-size: 13.5px; opacity: 0.86; margin-top: 5px; }
@@ -89,6 +91,7 @@ section[data-testid="stSidebar"] {
     border-radius: 999px;
     font-size: 12.5px;
     font-weight: 700;
+    white-space: nowrap;
 }
 
 /* Section Headers */
@@ -183,7 +186,56 @@ section[data-testid="stSidebar"] {
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. SECURE LOGIN GATE (USER ID & PASSWORD)
+# 2. LOGO LOADER (logo.jpeg FIRST + FALLBACKS)
+# ==============================================================================
+LOGO_CANDIDATES = [
+    "logo.jpeg",
+    "Arth_life_Loge.jpeg",
+    "Arth_life_Logo.jpeg",
+    "arth_life_loge.jpeg",
+    "logo.jpg",
+    "logo.png",
+]
+
+def _get_logo_data_uri():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    search_dirs = [
+        script_dir,
+        os.path.join(script_dir, "data"),
+        os.path.join(script_dir, "assets"),
+        os.getcwd(),
+        os.path.join(os.getcwd(), "data"),
+        os.path.join(os.getcwd(), "assets"),
+    ]
+    for folder in search_dirs:
+        if folder and os.path.isdir(folder):
+            for cand in LOGO_CANDIDATES:
+                fp = os.path.abspath(os.path.join(folder, cand))
+                if os.path.isfile(fp):
+                    ext = os.path.splitext(fp)[1].lower().lstrip(".")
+                    mime = "image/jpeg" if ext in ("jpg", "jpeg") else f"image/{ext or 'png'}"
+                    try:
+                        with open(fp, "rb") as img_f:
+                            b64 = base64.b64encode(img_f.read()).decode("utf-8")
+                        return f"data:{mime};base64,{b64}"
+                    except Exception:
+                        continue
+    return None
+
+LOGO_URI = _get_logo_data_uri()
+LOGO_LOGIN_HTML = (
+    f'<img src="{LOGO_URI}" alt="ARTH LIFE Logo" '
+    f'style="width:82px;height:82px;border-radius:50%;object-fit:cover;margin:0 auto 12px auto;display:block;box-shadow:0 8px 20px rgba(15,23,42,0.14);border:2px solid #E2E8F0;" />'
+    if LOGO_URI else '<div class="login-badge">👗</div>'
+)
+LOGO_BANNER_HTML = (
+    f'<img src="{LOGO_URI}" alt="ARTH LIFE Logo" '
+    f'style="width:58px;height:58px;min-width:58px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.45);box-shadow:0 6px 16px rgba(0,0,0,0.22);" />'
+    if LOGO_URI else ''
+)
+
+# ==============================================================================
+# 3. SECURE LOGIN GATE (USER ID & PASSWORD)
 # ==============================================================================
 def _get_credentials():
     try:
@@ -199,9 +251,9 @@ if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
 if not st.session_state["authenticated"]:
-    st.markdown("""
+    st.markdown(f"""
     <div class="login-wrap">
-        <div class="login-badge">👗</div>
+        {LOGO_LOGIN_HTML}
         <div class="login-title">ARTH LIFE Kids Fashion</div>
         <div class="login-sub">Executive Shopify Analytics Portal — Please Sign In</div>
     </div>
@@ -223,7 +275,7 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # ==============================================================================
-# 3. DATA LOADING & PREPROCESSING
+# 4. DATA LOADING & PREPROCESSING
 # ==============================================================================
 DEFAULT_PATH = r"C:\Users\yasha\OneDrive\Desktop\New folder (4)\New folder (4)\New folder\PowerBI_Dimensional_Model_Ecommerce_2.2.xlsx"
 MODEL_FILENAME = "PowerBI_Dimensional_Model_Ecommerce_2.2.xlsx"
@@ -328,7 +380,14 @@ def _make_donut_fig(labels, values, colors, center_text):
 
 # Sidebar
 with st.sidebar:
-    st.markdown("### 👗 ARTH LIFE Shopify")
+    if LOGO_URI:
+        sb_c1, sb_c2 = st.columns([1, 3.2])
+        with sb_c1:
+            st.image(LOGO_URI, width=44)
+        with sb_c2:
+            st.markdown("### ARTH LIFE")
+    else:
+        st.markdown("### 👗 ARTH LIFE Shopify")
     st.caption("Kids Fashion E-Commerce Analytics")
     if st.button("🚪 Logout", use_container_width=True):
         st.session_state["authenticated"] = False
@@ -382,7 +441,7 @@ with st.sidebar:
     sel_regions = st.multiselect("🌍 Filter Region", all_regions, default=all_regions)
 
 # ==============================================================================
-# 4. TOP BANNER & UNIFIED DATE SELECTION BAR
+# 5. TOP BANNER & UNIFIED DATE SELECTION BAR
 # ==============================================================================
 ds_col1, ds_col2, ds_col3 = st.columns([1, 1, 2.2])
 with ds_col1:
@@ -403,16 +462,19 @@ if start_date > end_date:
 
 st.markdown(f"""
 <div class="exec-banner">
-    <div>
-        <div class="exec-title">👗 ARTH LIFE Kids Fashion — Shopify Analysis</div>
-        <div class="exec-sub">Pure RTO & Cancelled Exchange Returns, Financial KPIs, Region/State RTO & Day-Wise Trends</div>
+    <div style="display:flex; align-items:center; gap:16px;">
+        {LOGO_BANNER_HTML}
+        <div>
+            <div class="exec-title">ARTH LIFE Kids Fashion — Shopify Analysis</div>
+            <div class="exec-sub">Pure RTO & Cancelled Exchange Returns, Financial KPIs, Region/State RTO & Day-Wise Trends</div>
+        </div>
     </div>
     <div class="exec-pill">📅 Created: {start_date.strftime('%d %b %Y')} — {end_date.strftime('%d %b %Y')}</div>
 </div>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 5. FILTER STRICTLY BY ORDER CREATED DATE (SINGLE PASS)
+# 6. FILTER STRICTLY BY ORDER CREATED DATE (SINGLE PASS)
 # ==============================================================================
 if reg_col:
     p_orders = df_orders[
@@ -502,7 +564,7 @@ else:
     p_rev_cancelled = pd.DataFrame()
 
 # ==============================================================================
-# 6. KPI CALCULATIONS (PURE RTO + CANCELLED EXCHANGES = TOTAL RETURNS)
+# 7. KPI CALCULATIONS (PURE RTO + CANCELLED EXCHANGES = TOTAL RETURNS)
 # ==============================================================================
 if not p_orders.empty and base_oid_col:
     p_orders_uniq = p_orders.drop_duplicates(subset=[base_oid_col]).copy()
@@ -674,7 +736,7 @@ if p_orders.empty:
     st.stop()
 
 # ==============================================================================
-# 7. PRESENTATION TABS
+# 8. PRESENTATION TABS
 # ==============================================================================
 tab1, tab2, tab3, tab4 = st.tabs([
     "📈 Executive Overview & Funnel",
@@ -751,9 +813,6 @@ with tab1:
         st.plotly_chart(fig_fun, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# ------------------------------------------------------------------------------
-# TAB 2: SEPARATE RTO SECTION & SEPARATE EXCHANGE SECTION
-# ------------------------------------------------------------------------------
 with tab2:
     m1, m2, m3, m4, m5 = st.columns(5)
     with m1:
