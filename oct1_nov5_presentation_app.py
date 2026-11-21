@@ -333,7 +333,8 @@ def load_model(file_source):
     orders["Order_Date_dt"] = pd.to_datetime(orders["Order_Date"], dayfirst=True, errors="coerce")
     for c in ["Order_Total", "Order_Subtotal", "Discount", "Shipping", "Total_Line_Items"]:
         if c in orders.columns:
-            orders[c] = pd.to_numeric(orders[c], errors="coerce").fillna(0.0)
+            cleaned_s = orders[c].astype(str).str.replace(",", "", regex=False).str.replace("₹", "", regex=False).str.strip()
+            orders[c] = pd.to_numeric(cleaned_s, errors="coerce").fillna(0.0)
 
     pm = orders["Payment_Method"].fillna("Unknown").astype(str) if "Payment_Method" in orders.columns else pd.Series(["Unknown"] * len(orders))
     orders["Payment_Category"] = np.where(
@@ -749,12 +750,18 @@ with tab1:
     c_left, c_right = st.columns([1.85, 1.15])
     with c_left:
         st.markdown('<div class="card-box"><div class="card-title">📊 Daily Unique Orders & Revenue Trend</div>', unsafe_allow_html=True)
-        daily = p_orders_uniq.groupby("Order_Date_dt").agg(
+        p_orders_uniq["Order_Date_Only"] = p_orders_uniq["Order_Date_dt"].dt.date
+        daily = p_orders_uniq.groupby("Order_Date_Only").agg(
             Orders=(base_oid_col, "nunique"),
             Revenue=("Order_Total", "sum")
-        ).reset_index().sort_values("Order_Date_dt")
-        daily["Date_Label"] = daily["Order_Date_dt"].dt.strftime("%d %b")
+        ).reset_index().sort_values("Order_Date_Only")
+        daily["Date_Label"] = pd.to_datetime(daily["Order_Date_Only"]).dt.strftime("%d %b")
         daily["Rev_Lakhs"] = (daily["Revenue"] / 1e5).round(2)
+        daily["AOV"] = np.where(daily["Orders"] > 0, daily["Revenue"] / daily["Orders"], 0.0)
+        daily["Custom_Hover"] = [
+            f"₹{rev:,.2f} (₹{rev/1e5:.2f}L) | AOV: ₹{aov_v:,.0f}"
+            for rev, aov_v in zip(daily["Revenue"], daily["AOV"])
+        ]
 
         fig_dual = make_subplots(specs=[[{"secondary_y": True}]])
         fig_dual.add_trace(
@@ -772,7 +779,8 @@ with tab1:
                 x=daily["Date_Label"], y=daily["Rev_Lakhs"], name="Revenue (₹ Lakhs)",
                 mode="lines+markers", line=dict(color="#EC4899", width=3, shape="spline"),
                 marker=dict(size=7, color="#FFFFFF", line=dict(width=2.5, color="#EC4899")),
-                hovertemplate="Revenue: ₹%{y:.2f}L<extra></extra>"
+                customdata=daily["Custom_Hover"],
+                hovertemplate="Revenue: %{customdata}<extra></extra>"
             ),
             secondary_y=True
         )
