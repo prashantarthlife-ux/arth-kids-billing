@@ -2,13 +2,12 @@ import os
 import datetime
 import numpy as np
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import streamlit as st
 
 # ==============================================================================
-# 1. PAGE CONFIG & EXECUTIVE SAAS STYLING (SIDEBAR VISIBLE)
+# 1. PAGE CONFIG & ATTRACTIVE EXECUTIVE SAAS STYLING
 # ==============================================================================
 st.set_page_config(
     page_title="ARTH LIFE Kids Fashion — Shopify Analysis",
@@ -24,59 +23,84 @@ st.markdown("""
 html, body, [class*="css"] {
     font-family: 'Plus Jakarta Sans', sans-serif !important;
 }
-.stApp { background-color: #F5F7FB; }
+.stApp { background-color: #F4F6FB; }
 
-/* Keep Header & Sidebar '>' button visible; hide only menu/footer/toolbar */
 #MainMenu, footer { visibility: hidden; }
 header[data-testid="stHeader"] { background: transparent !important; }
 [data-testid="stToolbar"] { visibility: hidden; }
 
 .block-container {
-    padding-top: 1.4rem !important;
-    padding-bottom: 2rem !important;
+    padding-top: 1.3rem !important;
+    padding-bottom: 2.2rem !important;
     padding-left: 2rem !important;
     padding-right: 2rem !important;
 }
 
 section[data-testid="stSidebar"] {
     background-color: #FFFFFF;
-    border-right: 1px solid #E8ECF4;
+    border-right: 1px solid #E6EAF2;
 }
 
-/* Executive Banner */
+/* Top Banner */
 .exec-banner {
-    background: linear-gradient(135deg, #1E293B 0%, #312E81 60%, #6D28D9 100%);
-    border-radius: 20px;
-    padding: 24px 28px;
+    background: linear-gradient(135deg, #0F172A 0%, #312E81 55%, #7C3AED 100%);
+    border-radius: 22px;
+    padding: 24px 30px;
     color: #FFFFFF;
-    margin-bottom: 20px;
-    box-shadow: 0 12px 28px rgba(30, 41, 59, 0.16);
+    margin-bottom: 18px;
+    box-shadow: 0 14px 30px rgba(30, 41, 59, 0.18);
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
-.exec-title { font-size: 24px; font-weight: 800; letter-spacing: -0.4px; margin: 0; }
-.exec-sub   { font-size: 13.5px; opacity: 0.85; margin-top: 4px; }
+.exec-title { font-size: 25px; font-weight: 800; letter-spacing: -0.5px; margin: 0; }
+.exec-sub   { font-size: 13.5px; opacity: 0.86; margin-top: 5px; }
 .exec-pill  {
     background: rgba(255,255,255,0.16);
-    border: 1px solid rgba(255,255,255,0.28);
-    padding: 8px 16px;
+    border: 1px solid rgba(255,255,255,0.30);
+    padding: 9px 18px;
     border-radius: 999px;
     font-size: 12.5px;
     font-weight: 700;
 }
 
+/* Section Headers (RTO vs Exchange separate sections) */
+.sec-header-rto {
+    background: linear-gradient(90deg, #FFF1F2 0%, #FFFFFF 100%);
+    border-left: 5px solid #EF4444;
+    border-radius: 14px;
+    padding: 14px 20px;
+    margin-top: 10px;
+    margin-bottom: 14px;
+    border-top: 1px solid #FFE4E6;
+    border-right: 1px solid #FFE4E6;
+    border-bottom: 1px solid #FFE4E6;
+}
+.sec-header-exch {
+    background: linear-gradient(90deg, #F5F3FF 0%, #FFFFFF 100%);
+    border-left: 5px solid #8B5CF6;
+    border-radius: 14px;
+    padding: 14px 20px;
+    margin-top: 18px;
+    margin-bottom: 14px;
+    border-top: 1px solid #EDE9FE;
+    border-right: 1px solid #EDE9FE;
+    border-bottom: 1px solid #EDE9FE;
+}
+.sec-title { font-size: 18px; font-weight: 800; color: #0F172A; margin: 0; }
+.sec-sub   { font-size: 12.5px; color: #64748B; margin-top: 2px; }
+
 /* KPI Cards */
 .kpi-card {
     background: #FFFFFF;
     border-radius: 16px;
-    padding: 18px 20px;
+    padding: 17px 19px;
     box-shadow: 0 6px 20px rgba(15, 23, 42, 0.04);
-    border: 1px solid #E8ECF4;
+    border: 1px solid #E6EAF2;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    transition: transform 0.2s ease;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08); }
 .kpi-lbl  { font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.4px; }
@@ -84,41 +108,29 @@ section[data-testid="stSidebar"] {
 .kpi-tag  { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
 .kpi-ico  { width: 42px; height: 42px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
 
-/* White Chart Containers */
+/* Chart Cards */
 .card-box {
     background: #FFFFFF;
     border-radius: 18px;
     padding: 20px 22px;
     box-shadow: 0 6px 20px rgba(15, 23, 42, 0.04);
-    border: 1px solid #E8ECF4;
+    border: 1px solid #E6EAF2;
     margin-bottom: 18px;
 }
 .card-title { font-size: 15.5px; font-weight: 700; color: #0F172A; margin-bottom: 12px; }
 
-/* Progress Rows for Top Products */
+/* Progress Rows */
 .prod-row { margin-bottom: 13px; }
 .prod-meta { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; color: #1E293B; margin-bottom: 5px; }
 .prod-track { width: 100%; height: 9px; background: #F1F5F9; border-radius: 999px; overflow: hidden; }
 .prod-fill  { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #EC4899 0%, #8B5CF6 100%); }
-
-/* Insight Callout */
-.insight-box {
-    background: #FFFBEB;
-    border-left: 4px solid #F59E0B;
-    border-radius: 10px;
-    padding: 12px 16px;
-    font-size: 13px;
-    color: #78350F;
-    margin-bottom: 16px;
-}
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. DATA LOADING & PREPROCESSING (AUTO-LOADS EXCEL FROM GITHUB REPO)
+# 2. DATA LOADING & PREPROCESSING
 # ==============================================================================
 DEFAULT_PATH = r"C:\Users\yasha\OneDrive\Desktop\New folder (4)\New folder (4)\New folder\PowerBI_Dimensional_Model_Ecommerce_2.2.xlsx"
-
 MODEL_FILENAME = "PowerBI_Dimensional_Model_Ecommerce_2.2.xlsx"
 
 def _find_repo_excel():
@@ -173,6 +185,16 @@ def load_model(file_source):
 
     return orders, disp, rev
 
+def _week_bucket(dt_val, start_d):
+    if pd.isna(dt_val):
+        return "Unknown"
+    d = dt_val.date() if isinstance(dt_val, pd.Timestamp) else dt_val
+    day_idx = max((d - start_d).days, 0)
+    w_num = (day_idx // 7) + 1
+    w_start = start_d + datetime.timedelta(days=(w_num - 1) * 7)
+    w_end = min(w_start + datetime.timedelta(days=6), d + datetime.timedelta(days=6))
+    return f"Week {w_num} ({w_start.strftime('%d %b')}–{w_end.strftime('%d %b')})"
+
 # Sidebar
 with st.sidebar:
     st.markdown("### 👗 ARTH LIFE Shopify")
@@ -225,7 +247,7 @@ with st.sidebar:
     sel_regions = st.multiselect("🌍 Filter Region", all_regions, default=all_regions)
 
 # ==============================================================================
-# 3. TOP BANNER & UNIFIED DATE SELECTION BAR (SINGLE SOURCE OF TRUTH)
+# 3. TOP BANNER & UNIFIED DATE SELECTION BAR
 # ==============================================================================
 ds_col1, ds_col2, ds_col3 = st.columns([1, 1, 2.2])
 with ds_col1:
@@ -248,14 +270,14 @@ st.markdown(f"""
 <div class="exec-banner">
     <div>
         <div class="exec-title">👗 ARTH LIFE Kids Fashion — Shopify Analysis</div>
-        <div class="exec-sub">Order-to-Delivery, Gross & Net Revenue, Discount, Shipping, RTO & Exchange Review</div>
+        <div class="exec-sub">Dedicated RTO & Exchange Sections, Order-to-Delivery Funnel, Revenue, Discount & Shipping</div>
     </div>
     <div class="exec-pill">📅 Created: {start_date.strftime('%d %b %Y')} — {end_date.strftime('%d %b %Y')}</div>
 </div>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 4. FILTER & COMPUTE ACCURATE METRICS (SINGLE PASS BY ORDER CREATED DATE)
+# 4. FILTER STRICTLY BY ORDER CREATED DATE (SINGLE PASS)
 # ==============================================================================
 p_orders = df_orders[
     (df_orders["Order_Date_dt"].dt.date >= start_date) &
@@ -264,14 +286,15 @@ p_orders = df_orders[
 ].copy()
 
 period_ids = set(p_orders["Base_Order_ID"].dropna())
-
 p_disp = df_disp[df_disp["Base_Order_ID"].isin(period_ids)].copy()
 
 if not p_disp.empty:
-    p_disp = p_disp.merge(
-        p_orders[["Base_Order_ID", "Order_Date", "Order_Date_dt", "Payment_Category", "Order_Total", "Order_Notes", "Customer_Name"]],
-        on="Base_Order_ID", how="left"
-    )
+    merge_cols = ["Base_Order_ID", "Order_Date", "Order_Date_dt", "Payment_Category", "Order_Total", "Order_Notes", "Customer_Name"]
+    for extra_c in ["Customer_Region", "Shipping_State", "State", "Shipping_City"]:
+        if extra_c in p_orders.columns and extra_c not in p_disp.columns:
+            merge_cols.append(extra_c)
+    p_disp = p_disp.merge(p_orders[merge_cols].drop_duplicates(subset=["Base_Order_ID"]), on="Base_Order_ID", how="left")
+
     status_u = p_disp["Shipment_Status"].fillna("").astype(str).str.strip().str.upper()
     has_del = p_disp["Delivered_Date"].notna() & (p_disp["Delivered_Date"].astype(str).str.strip() != "")
     is_rto = p_disp["Is_RTO"].astype(bool)
@@ -304,10 +327,10 @@ rto_pending_hub_df = p_disp[p_disp["RTO_Pending_Hub"]].copy() if not p_disp.empt
 rto_pending_hub_oids = set(rto_pending_hub_df["Base_Order_ID"].dropna()) if not rto_pending_hub_df.empty else set()
 int_oids = (set(p_disp[p_disp["True_In_Transit"]]["Base_Order_ID"].dropna()) - del_oids - rto_oids) if not p_disp.empty else set()
 
-p_rev = df_rev[df_rev["Base_Order_ID"].isin(period_ids)].copy() if not df_rev.empty else pd.DataFrame()
+p_rev = df_rev[df_rev["Base_Order_ID"].isin(period_ids)].copy() if (not df_rev.empty and "Base_Order_ID" in df_rev.columns) else pd.DataFrame()
 
 # ==============================================================================
-# 5. EXECUTIVE KPI CARDS (UNIQUE COUNTS & FINANCIAL METRICS)
+# 5. EXECUTIVE KPI CARDS
 # ==============================================================================
 if not p_orders.empty and "Base_Order_ID" in p_orders.columns:
     p_orders_uniq = p_orders.drop_duplicates(subset=["Base_Order_ID"]).copy()
@@ -332,11 +355,11 @@ rto_cnt = len(rto_oids)
 rto_pct = (rto_cnt / disp_cnt * 100) if disp_cnt > 0 else 0.0
 rto_hub_parcels = int(p_disp["RTO_Pending_Hub"].sum()) if not p_disp.empty else 0
 rto_hub_orders = len(rto_pending_hub_oids)
-
-if not p_rev.empty and "Base_Order_ID" in p_rev.columns:
-    exch_cnt = int(p_rev["Base_Order_ID"].nunique())
-else:
-    exch_cnt = len(p_rev)
+exch_cnt = int(p_rev["Base_Order_ID"].nunique()) if (not p_rev.empty and "Base_Order_ID" in p_rev.columns) else len(p_rev)
+tot_ret_disp_cnt = rto_cnt + exch_cnt
+tot_ret_disp_pct = (tot_ret_disp_cnt / max(disp_cnt, 1) * 100) if disp_cnt > 0 else 0.0
+exch_rev = float(p_orders_uniq[p_orders_uniq["Base_Order_ID"].isin(set(p_rev["Base_Order_ID"]))]["Order_Total"].sum()) if (not p_rev.empty and "Base_Order_ID" in p_rev.columns and len(p_orders_uniq) > 0) else 0.0
+tot_ret_amt = rto_rev + exch_rev
 
 k1, k2, k3, k4, k5 = st.columns(5)
 with k1:
@@ -345,7 +368,7 @@ with k1:
         <div>
             <div class="kpi-lbl">Unique Orders</div>
             <div class="kpi-val">{tot_ord:,}</div>
-            <span class="kpi-tag" style="background:#EEF2FF; color:#4F46E5;">{int(p_orders['Total_Line_Items'].sum()) if tot_ord>0 else 0:,} Items</span>
+            <span class="kpi-tag" style="background:#EEF2FF; color:#4F46E5;">{int(p_orders_uniq['Total_Line_Items'].sum()) if len(p_orders_uniq)>0 else 0:,} Items</span>
         </div>
         <div class="kpi-ico" style="background:#EEF2FF;">🛍️</div>
     </div>""", unsafe_allow_html=True)
@@ -423,7 +446,7 @@ with f3:
     st.markdown(f"""
     <div class="kpi-card">
         <div>
-            <div class="kpi-lbl">Unique RTO / Exch</div>
+            <div class="kpi-lbl">RTO / Exchange Orders</div>
             <div class="kpi-val">{rto_cnt:,} / {exch_cnt:,}</div>
             <span class="kpi-tag" style="background:#FEF2F2; color:#DC2626;">RTO: {rto_pct:.1f}%</span>
         </div>
@@ -448,18 +471,17 @@ if p_orders.empty:
     st.stop()
 
 # ==============================================================================
-# 6. EXECUTIVE PRESENTATION TABS
+# 6. TABS — WITH SEPARATE RTO & EXCHANGE SECTIONS
 # ==============================================================================
 tab1, tab2, tab3, tab4 = st.tabs([
     "📈 Executive Overview & Funnel",
-    "↩️ RTO & Exchange Status Analysis",
+    "↩️ RTO & Exchange Separate Sections",
     "👗 Products, Age Groups & Regions",
-    "📋 Actionable Tables (RTO Hub Pending, In-Transit & Unshipped)"
+    "📋 Actionable Tables"
 ])
 
 with tab1:
     c_left, c_right = st.columns([1.85, 1.15])
-
     with c_left:
         st.markdown('<div class="card-box"><div class="card-title">📊 Daily Unique Orders & Revenue Trend</div>', unsafe_allow_html=True)
         daily = p_orders_uniq.groupby("Order_Date_dt").agg(
@@ -526,153 +548,171 @@ with tab1:
         st.plotly_chart(fig_fun, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+# ------------------------------------------------------------------------------
+# TAB 2: SEPARATE RTO SECTION & SEPARATE EXCHANGE SECTION
+# ------------------------------------------------------------------------------
 with tab2:
-    st.markdown(f"""
-    <div class="insight-box">
-        💡 <b>Selected Created Orders Window ({start_date.strftime('%d %b %Y')} — {end_date.strftime('%d %b %Y')}):</b>
-        Unique RTO Orders = <b>{rto_cnt:,}</b> (Pending to Hub = <b>{rto_hub_orders:,}</b> unique orders / <b>{rto_hub_parcels:,}</b> parcels) ·
-        Unique Exchanges (<code>Fact_Reverse_Logistics</code>) = <b>{exch_cnt:,}</b> · RTO Value = <b>₹{rto_rev:,.2f}</b>.
+    s1, s2, s3, s4 = st.columns(4)
+    s1.metric("Total Returns Display", f"{tot_ret_disp_cnt:,} ({tot_ret_disp_pct:.2f}%)")
+    s2.metric("Total Return Amount", f"₹{tot_ret_amt:,.2f}")
+    s3.metric("Total RTO Orders", f"{rto_cnt:,}")
+    s4.metric("Total Exchange Orders", f"{exch_cnt:,}")
+
+    # ================= SECTION A: DEDICATED RTO SECTION =================
+    st.markdown("""
+    <div class="sec-header-rto">
+        <div class="sec-title">🚚 Section 1: RTO (Return-to-Origin) Analysis</div>
+        <div class="sec-sub">RTO Status Donut, State-wise / Region-wise RTO Returns & Weekly RTO Trend</div>
     </div>
     """, unsafe_allow_html=True)
 
-    d1, d2 = st.columns(2)
-    with d1:
-        st.markdown('<div class="card-box"><div class="card-title">🍩 RTO & Exchange Status Breakdown (Donut Chart)</div>', unsafe_allow_html=True)
-        rto_sub = p_disp[p_disp["Is_RTO"] & (~p_disp["Base_Order_ID"].isin(del_oids))].copy() if not p_disp.empty else pd.DataFrame()
-        rto_received_cnt = int(rto_sub[~rto_sub["RTO_Pending_Hub"]]["Base_Order_ID"].nunique()) if not rto_sub.empty else 0
-        rto_pending_cnt = int(rto_sub[rto_sub["RTO_Pending_Hub"]]["Base_Order_ID"].nunique()) if not rto_sub.empty else 0
+    rto_df = p_disp[p_disp["Is_RTO"] & (~p_disp["Base_Order_ID"].isin(del_oids))].copy() if not p_disp.empty else pd.DataFrame()
 
-        donut_items = []
-        if rto_pending_cnt > 0:
-            donut_items.append(("RTO — Pending to Hub (Unique)", rto_pending_cnt))
-        if rto_received_cnt > 0:
-            donut_items.append(("RTO — Received at Hub (Unique)", rto_received_cnt))
-
-        if not p_rev.empty:
-            p_rev_u = p_rev.drop_duplicates(subset=["Base_Order_ID"]) if "Base_Order_ID" in p_rev.columns else p_rev
-            status_col = next((c for c in ["Return_Status", "Exchange_Status", "Status", "Shipment_Status", "Reason"] if c in p_rev_u.columns), None)
-            if status_col:
-                rev_vc = p_rev_u[status_col].fillna("Exchange (Recorded)").astype(str).str.strip()
-                rev_vc = rev_vc.replace("", "Exchange (Recorded)").value_counts()
-                for st_name, cnt in rev_vc.items():
-                    donut_items.append((f"Exchange — {st_name}", int(cnt)))
+    rto_c1, rto_c2, rto_c3 = st.columns(3)
+    with rto_c1:
+        st.markdown('<div class="card-box"><div class="card-title">🍩 RTO Status Breakdown (Donut)</div>', unsafe_allow_html=True)
+        if not rto_df.empty:
+            st_col_rto = "Shipment_Status" if "Shipment_Status" in rto_df.columns else None
+            if st_col_rto:
+                rto_st_agg = rto_df.groupby(rto_df[st_col_rto].fillna("RTO").astype(str).str.strip())["Base_Order_ID"].nunique().reset_index(name="Count")
+                rto_st_agg.columns = ["Status", "Count"]
             else:
-                donut_items.append(("Exchange / Reverse Logistics (Unique)", len(p_rev_u)))
-
-        if donut_items:
-            dn_df = pd.DataFrame(donut_items, columns=["Status", "Count"])
-            donut_colors = ["#EA580C", "#EF4444", "#8B5CF6", "#0EA5E9", "#10B981", "#F59E0B", "#EC4899"]
-            fig_donut = go.Figure(go.Pie(
-                labels=dn_df["Status"],
-                values=dn_df["Count"],
-                hole=0.55,
-                textinfo="label+value+percent",
-                textposition="outside",
-                marker=dict(colors=donut_colors[:len(dn_df)], line=dict(color="#FFFFFF", width=2)),
-                hovertemplate="<b>%{label}</b><br>Unique Count: %{value:,}<br>Share: %{percent}<extra></extra>"
+                rto_st_agg = pd.DataFrame({"Status": ["RTO Pending Hub", "RTO Received Hub"], "Count": [rto_hub_orders, max(rto_cnt - rto_hub_orders, 0)]})
+            rto_st_agg = rto_st_agg[rto_st_agg["Count"] > 0]
+            fig_rto_donut = go.Figure(go.Pie(
+                labels=rto_st_agg["Status"], values=rto_st_agg["Count"], hole=0.56,
+                textinfo="label+value+percent", textposition="outside",
+                marker=dict(colors=["#EF4444", "#F97316", "#F59E0B", "#DC2626", "#E11D48"], line=dict(color="#FFFFFF", width=2))
             ))
-            fig_donut.update_layout(
-                height=380,
-                margin=dict(l=20, r=20, t=25, b=25),
-                paper_bgcolor="rgba(0,0,0,0)",
-                showlegend=True,
-                legend=dict(orientation="h", yanchor="bottom", y=-0.22, xanchor="center", x=0.5),
-                annotations=[dict(text=f"<b>{dn_df['Count'].sum():,}</b><br>Unique", x=0.5, y=0.5, font_size=15, showarrow=False)]
+            fig_rto_donut.update_layout(
+                height=340, margin=dict(l=15, r=15, t=20, b=20), paper_bgcolor="rgba(0,0,0,0)",
+                showlegend=False, annotations=[dict(text=f"<b>{rto_cnt:,}</b><br>RTO", x=0.5, y=0.5, font_size=14, showarrow=False)]
             )
-            st.plotly_chart(fig_donut, use_container_width=True)
+            st.plotly_chart(fig_rto_donut, use_container_width=True)
         else:
-            st.info("निवडलेल्या तारीख रेंजमध्ये कोणतेही RTO किंवा Exchange रेकॉर्ड्स नाहीत.")
+            st.info("निवडलेल्या कालावधीत RTO ऑर्डर्स नाहीत.")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    with d2:
-        st.markdown('<div class="card-box"><div class="card-title">↩️ Monthly Unique RTO & Exchange Count</div>', unsafe_allow_html=True)
-        if not rto_sub.empty and "Order_Date_dt" in rto_sub.columns:
-            rto_sub["Month_Lbl"] = rto_sub["Order_Date_dt"].dt.to_period("M").astype(str)
-            m_rto = rto_sub.groupby("Month_Lbl")["Base_Order_ID"].nunique().reset_index(name="RTO_Orders")
+    with rto_c2:
+        st.markdown('<div class="card-box"><div class="card-title">🗺️ Region / State-wise RTO Returns</div>', unsafe_allow_html=True)
+        if not rto_df.empty:
+            geo_col = next((c for c in ["Shipping_State", "State", "Customer_Region", "Shipping_City"] if c in rto_df.columns), None)
+            if geo_col:
+                geo_rto = rto_df.groupby(rto_df[geo_col].fillna("Unknown").astype(str).str.strip())["Base_Order_ID"].nunique().reset_index(name="RTO_Orders").sort_values("RTO_Orders", ascending=True).tail(6)
+                fig_geo_rto = go.Figure(go.Bar(
+                    y=geo_rto[geo_col], x=geo_rto["RTO_Orders"], orientation="h",
+                    marker=dict(color="#0284C7", cornerradius=8),
+                    text=geo_rto["RTO_Orders"], textposition="outside"
+                ))
+                fig_geo_rto.update_layout(
+                    height=340, margin=dict(l=0, r=35, t=15, b=15), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    xaxis=dict(showgrid=True, gridcolor="#F1F5F9", range=[0, max(float(geo_rto["RTO_Orders"].max()) * 1.25, 3.0)])
+                )
+                st.plotly_chart(fig_geo_rto, use_container_width=True)
         else:
-            m_rto = pd.DataFrame({"Month_Lbl": [start_date.strftime("%Y-%m")], "RTO_Orders": [0]})
+            st.info("No RTO geography data.")
+        st.markdown('</div>', unsafe_allow_html=True)
 
+    with rto_c3:
+        st.markdown('<div class="card-box"><div class="card-title">📆 Weekly RTO Return Analysis</div>', unsafe_allow_html=True)
+        if not rto_df.empty and "Order_Date_dt" in rto_df.columns:
+            rto_df["Week_Lbl"] = rto_df["Order_Date_dt"].apply(lambda d: _week_bucket(d, start_date))
+            wk_rto = rto_df.groupby("Week_Lbl")["Base_Order_ID"].nunique().reset_index(name="RTO_Count")
+            fig_wk_rto = go.Figure()
+            fig_wk_rto.add_trace(go.Bar(
+                x=wk_rto["Week_Lbl"], y=wk_rto["RTO_Count"], name="Weekly RTO",
+                marker=dict(color="#FB923C", cornerradius=8),
+                text=wk_rto["RTO_Count"], textposition="outside"
+            ))
+            fig_wk_rto.add_trace(go.Scatter(
+                x=wk_rto["Week_Lbl"], y=wk_rto["RTO_Count"], name="Trend",
+                mode="lines+markers", line=dict(color="#EA580C", width=2.5, shape="spline")
+            ))
+            fig_wk_rto.update_layout(
+                height=340, margin=dict(l=10, r=10, t=20, b=15), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                showlegend=False, yaxis=dict(showgrid=True, gridcolor="#F1F5F9", range=[0, max(float(wk_rto["RTO_Count"].max()) * 1.3, 3.0)])
+            )
+            st.plotly_chart(fig_wk_rto, use_container_width=True)
+        else:
+            st.info("No weekly RTO data.")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # ================= SECTION B: DEDICATED EXCHANGE SECTION =================
+    st.markdown("""
+    <div class="sec-header-exch">
+        <div class="sec-title">🔄 Section 2: Exchange Analysis (<code>Fact_Reverse_Logistics</code>)</div>
+        <div class="sec-sub">Exchanged Status Donut, Weekly Exchange Orders Analysis & Reverse Logistics Records</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    ex_c1, ex_c2 = st.columns([1.05, 1.35])
+    with ex_c1:
+        st.markdown('<div class="card-box"><div class="card-title">🍩 Exchanged Status (Donut Chart)</div>', unsafe_allow_html=True)
         if not p_rev.empty:
-            rev_merged = p_rev.merge(p_orders_uniq[["Base_Order_ID", "Order_Date_dt"]], on="Base_Order_ID", how="left")
-            if "Order_Date_dt" in rev_merged.columns and rev_merged["Order_Date_dt"].notna().any():
-                rev_merged["Month_Lbl"] = rev_merged["Order_Date_dt"].dt.to_period("M").astype(str)
-                m_exch = rev_merged.groupby("Month_Lbl")["Base_Order_ID"].nunique().reset_index(name="Exchange_Count")
+            p_rev_u = p_rev.drop_duplicates(subset=["Base_Order_ID"]) if "Base_Order_ID" in p_rev.columns else p_rev.copy()
+            ex_st_col = next((c for c in ["Exchange_Status", "Return_Status", "Status", "Shipment_Status", "Reason"] if c in p_rev_u.columns), None)
+            if ex_st_col:
+                ex_agg = p_rev_u.groupby(p_rev_u[ex_st_col].fillna("Exchange").astype(str).str.strip()).size().reset_index(name="Count")
+                ex_agg.columns = ["Status", "Count"]
             else:
-                m_exch = pd.DataFrame({"Month_Lbl": [start_date.strftime("%Y-%m")], "Exchange_Count": [exch_cnt]})
+                ex_agg = pd.DataFrame({"Status": ["Exchanged"], "Count": [len(p_rev_u)]})
+            ex_agg = ex_agg[ex_agg["Count"] > 0]
+            fig_ex_donut = go.Figure(go.Pie(
+                labels=ex_agg["Status"], values=ex_agg["Count"], hole=0.56,
+                textinfo="label+value+percent", textposition="outside",
+                marker=dict(colors=["#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#0EA5E9", "#EC4899"], line=dict(color="#FFFFFF", width=2))
+            ))
+            fig_ex_donut.update_layout(
+                height=350, margin=dict(l=20, r=20, t=20, b=20), paper_bgcolor="rgba(0,0,0,0)",
+                showlegend=False, annotations=[dict(text=f"<b>{int(ex_agg['Count'].sum()):,}</b><br>Exchange", x=0.5, y=0.5, font_size=14, showarrow=False)]
+            )
+            st.plotly_chart(fig_ex_donut, use_container_width=True)
         else:
-            m_exch = pd.DataFrame({"Month_Lbl": m_rto["Month_Lbl"].tolist(), "Exchange_Count": [0] * len(m_rto)})
-
-        me_df = pd.merge(m_rto, m_exch, on="Month_Lbl", how="outer").fillna(0).sort_values("Month_Lbl")
-        me_df["RTO_Orders"] = me_df["RTO_Orders"].astype(int)
-        me_df["Exchange_Count"] = me_df["Exchange_Count"].astype(int)
-
-        fig_me = go.Figure()
-        fig_me.add_trace(go.Bar(x=me_df["Month_Lbl"], y=me_df["RTO_Orders"], name="Unique RTO Orders", marker=dict(color="#EF4444", cornerradius=8), text=me_df["RTO_Orders"], textposition="outside"))
-        fig_me.add_trace(go.Bar(x=me_df["Month_Lbl"], y=me_df["Exchange_Count"], name="Unique Exchanges", marker=dict(color="#8B5CF6", cornerradius=8), text=me_df["Exchange_Count"], textposition="outside"))
-        max_me_y = max(me_df["RTO_Orders"].max(), me_df["Exchange_Count"].max(), 1) * 1.25
-        fig_me.update_layout(barmode="group", height=380, margin=dict(l=10, r=10, t=30, b=15), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", yaxis=dict(range=[0, max_me_y], showgrid=True, gridcolor="#F1F5F9", title="Unique Count"), legend=dict(orientation="h", yanchor="bottom", y=1.03, xanchor="right", x=1))
-        st.plotly_chart(fig_me, use_container_width=True)
+            st.info("निवडलेल्या कालावधीत `Fact_Reverse_Logistics` मध्ये Exchange रेकॉर्ड्स नाहीत.")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    r1, r2, r3 = st.columns(3)
-    with r1:
-        st.markdown('<div class="card-box"><div class="card-title">💳 COD vs Prepaid — Unique Orders</div>', unsafe_allow_html=True)
-        if not p_disp.empty:
-            pay_agg = p_disp.groupby("Payment_Category").agg(Parcels=("Base_Order_ID", "nunique"), Delivered=("True_Delivered", "sum"), RTO=("Is_RTO", "sum")).reset_index()
-            pay_agg["Del_Pct"] = (pay_agg["Delivered"] / pay_agg["Parcels"].replace(0, 1) * 100).round(1)
-            pay_agg["RTO_Pct"] = (pay_agg["RTO"] / pay_agg["Parcels"].replace(0, 1) * 100).round(1)
-            del_labels = [f"<b>{int(d):,}</b><br>({p:.1f}%)" for d, p in zip(pay_agg["Delivered"], pay_agg["Del_Pct"])]
-            rto_labels = [f"<b>{int(r):,}</b><br>({p:.1f}%)" for r, p in zip(pay_agg["RTO"], pay_agg["RTO_Pct"])]
-            fig_pay = go.Figure()
-            fig_pay.add_trace(go.Bar(x=pay_agg["Payment_Category"], y=pay_agg["Delivered"], name="Delivered", marker=dict(color="#10B981", cornerradius=8), text=del_labels, textposition="outside"))
-            fig_pay.add_trace(go.Bar(x=pay_agg["Payment_Category"], y=pay_agg["RTO"], name="RTO", marker=dict(color="#EF4444", cornerradius=8), text=rto_labels, textposition="outside"))
-            max_pay_y = max(pay_agg["Delivered"].max(), pay_agg["RTO"].max(), 1) * 1.25
-            fig_pay.update_layout(barmode="group", height=340, margin=dict(l=10, r=10, t=30, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", yaxis=dict(showgrid=True, gridcolor="#F1F5F9", range=[0, max_pay_y]))
-            st.plotly_chart(fig_pay, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with r2:
-        st.markdown('<div class="card-box"><div class="card-title">🚚 Carrier Performance (Delhivery vs DTDC)</div>', unsafe_allow_html=True)
-        if not p_disp.empty and "Dispatch_Category" in p_disp.columns:
-            carr_agg = p_disp.groupby("Dispatch_Category").agg(Parcels=("Base_Order_ID", "nunique"), Delivered=("True_Delivered", "sum"), RTO=("Is_RTO", "sum")).reset_index()
-            carr_agg["Delivery %"] = (carr_agg["Delivered"] / carr_agg["Parcels"].replace(0, 1) * 100).round(1)
-            carr_agg["RTO %"] = (carr_agg["RTO"] / carr_agg["Parcels"].replace(0, 1) * 100).round(1)
-            carr_del_lbl = [f"<b>{p:.1f}%</b><br>({int(c):,})" for p, c in zip(carr_agg["Delivery %"], carr_agg["Delivered"])]
-            carr_rto_lbl = [f"<b>{p:.1f}%</b><br>({int(c):,})" for p, c in zip(carr_agg["RTO %"], carr_agg["RTO"])]
-            fig_car = go.Figure()
-            fig_car.add_trace(go.Bar(x=carr_agg["Dispatch_Category"], y=carr_agg["Delivery %"], name="Delivery %", marker=dict(color="#4F46E5", cornerradius=8), text=carr_del_lbl, textposition="outside"))
-            fig_car.add_trace(go.Bar(x=carr_agg["Dispatch_Category"], y=carr_agg["RTO %"], name="RTO %", marker=dict(color="#FF5C8D", cornerradius=8), text=carr_rto_lbl, textposition="outside"))
-            fig_car.update_layout(barmode="group", height=340, margin=dict(l=10, r=10, t=30, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", yaxis=dict(range=[0, 118], showgrid=True, gridcolor="#F1F5F9"))
-            st.plotly_chart(fig_car, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with r3:
-        st.markdown('<div class="card-box"><div class="card-title">🏭 RTO Pending to Hub (Unique Orders)</div>', unsafe_allow_html=True)
-        if not rto_pending_hub_df.empty and "Dispatch_Category" in rto_pending_hub_df.columns:
-            hub_agg = rto_pending_hub_df.groupby("Dispatch_Category").agg(Pending_Parcels=("Order_ID", "count"), Unique_Orders=("Base_Order_ID", "nunique")).reset_index()
-            hub_lbl = [f"<b>{int(o):,} ord</b> ({int(p):,} pcl)" for p, o in zip(hub_agg["Pending_Parcels"], hub_agg["Unique_Orders"])]
-            fig_hub = go.Figure(go.Bar(x=hub_agg["Dispatch_Category"], y=hub_agg["Unique_Orders"], name="RTO Pending Hub (Unique Orders)", marker=dict(color="#EA580C", cornerradius=8), text=hub_lbl, textposition="outside"))
-            fig_hub.update_layout(height=340, margin=dict(l=10, r=10, t=30, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", yaxis=dict(range=[0, max(float(hub_agg["Unique_Orders"].max()) * 1.25, 5.0)], showgrid=True, gridcolor="#F1F5F9"))
-            st.plotly_chart(fig_hub, use_container_width=True)
+    with ex_c2:
+        st.markdown('<div class="card-box"><div class="card-title">📆 Weekly Exchange Orders Analysis</div>', unsafe_allow_html=True)
+        if not p_rev.empty:
+            rev_w = p_rev.merge(p_orders_uniq[["Base_Order_ID", "Order_Date_dt"]], on="Base_Order_ID", how="left")
+            if "Order_Date_dt" in rev_w.columns and rev_w["Order_Date_dt"].notna().any():
+                rev_w["Week_Lbl"] = rev_w["Order_Date_dt"].apply(lambda d: _week_bucket(d, start_date))
+                wk_ex = rev_w.groupby("Week_Lbl")["Base_Order_ID"].nunique().reset_index(name="Exchange_Count")
+            else:
+                wk_ex = pd.DataFrame({"Week_Lbl": [f"Week 1 ({start_date.strftime('%d %b')})"], "Exchange_Count": [exch_cnt]})
+            fig_wk_ex = go.Figure()
+            fig_wk_ex.add_trace(go.Bar(
+                x=wk_ex["Week_Lbl"], y=wk_ex["Exchange_Count"], name="Weekly Exchanges",
+                marker=dict(color="#A855F7", cornerradius=8),
+                text=wk_ex["Exchange_Count"], textposition="outside"
+            ))
+            fig_wk_ex.add_trace(go.Scatter(
+                x=wk_ex["Week_Lbl"], y=wk_ex["Exchange_Count"], name="Trend",
+                mode="lines+markers", line=dict(color="#7C3AED", width=2.5, shape="spline")
+            ))
+            fig_wk_ex.update_layout(
+                height=350, margin=dict(l=10, r=10, t=20, b=15), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                showlegend=False, yaxis=dict(showgrid=True, gridcolor="#F1F5F9", range=[0, max(float(wk_ex["Exchange_Count"].max()) * 1.3, 3.0)])
+            )
+            st.plotly_chart(fig_wk_ex, use_container_width=True)
         else:
-            st.info("No RTO shipments pending to hub in selected period.")
+            st.info("No weekly exchange data in selected period.")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown(f"#### 🔄 Exchanges (<code>Fact_Reverse_Logistics</code> — {exch_cnt:,} Unique Orders)")
+    st.markdown(f"#### 🔄 Exchanges Detail (<code>Fact_Reverse_Logistics</code> — {exch_cnt:,} Unique Orders)")
     if not p_rev.empty:
-        st.dataframe(p_rev, use_container_width=True, height=260, hide_index=True)
+        st.dataframe(p_rev, use_container_width=True, height=250, hide_index=True)
         st.download_button(
-            "⬇️ Download Exchanges (Fact_Reverse_Logistics) CSV",
+            "⬇️ Download Exchanges CSV",
             p_rev.to_csv(index=False).encode("utf-8"),
-            f"exchanges_fact_reverse_logistics_{start_date}_{end_date}.csv",
+            f"exchanges_{start_date}_{end_date}.csv",
             "text/csv"
         )
     else:
-        st.info("निवडलेल्या तारीख रेंजमधील ऑर्डर्ससाठी `Fact_Reverse_Logistics` मध्ये कोणतेही Exchange रेकॉर्ड्स नाहीत.")
+        st.info("No Exchange records found for the selected created orders window.")
 
 with tab3:
     p1, p2 = st.columns([1.2, 1])
-
     with p1:
         st.markdown('<div class="card-box"><div class="card-title">🏆 Top 7 Bestselling Delivered Products</div>', unsafe_allow_html=True)
         if not p_disp.empty and "Clean_Product_Name" in p_disp.columns:
