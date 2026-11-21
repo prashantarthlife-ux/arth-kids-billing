@@ -11,8 +11,8 @@ import streamlit as st
 # 1. PAGE CONFIG & EXECUTIVE SAAS STYLING (SIDEBAR VISIBLE)
 # ==============================================================================
 st.set_page_config(
-    page_title="Arth Life — Executive Presentation",
-    page_icon="✨",
+    page_title="ARTH LIFE Kids Fashion — Shopify Analysis",
+    page_icon="👗",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -49,7 +49,7 @@ section[data-testid="stSidebar"] {
     border-radius: 20px;
     padding: 24px 28px;
     color: #FFFFFF;
-    margin-bottom: 22px;
+    margin-bottom: 20px;
     box-shadow: 0 12px 28px rgba(30, 41, 59, 0.16);
     display: flex;
     justify-content: space-between;
@@ -80,9 +80,9 @@ section[data-testid="stSidebar"] {
 }
 .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08); }
 .kpi-lbl  { font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.4px; }
-.kpi-val  { font-size: 23px; font-weight: 800; color: #0F172A; margin: 4px 0; letter-spacing: -0.5px; }
+.kpi-val  { font-size: 22px; font-weight: 800; color: #0F172A; margin: 4px 0; letter-spacing: -0.5px; }
 .kpi-tag  { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
-.kpi-ico  { width: 44px; height: 44px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 21px; }
+.kpi-ico  { width: 42px; height: 42px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
 
 /* White Chart Containers */
 .card-box {
@@ -119,6 +119,8 @@ section[data-testid="stSidebar"] {
 # ==============================================================================
 DEFAULT_PATH = r"C:\Users\yasha\OneDrive\Desktop\New folder (4)\New folder (4)\New folder\PowerBI_Dimensional_Model_Ecommerce_2.2.xlsx"
 
+MODEL_FILENAME = "PowerBI_Dimensional_Model_Ecommerce_2.2.xlsx"
+
 def _find_repo_excel():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     search_dirs = [
@@ -128,6 +130,11 @@ def _find_repo_excel():
         os.getcwd(),
         os.path.join(os.getcwd(), "data"),
     ]
+    for folder in search_dirs:
+        if folder and os.path.isdir(folder):
+            exact_fp = os.path.abspath(os.path.join(folder, MODEL_FILENAME))
+            if os.path.isfile(exact_fp):
+                return exact_fp
     for folder in search_dirs:
         if folder and os.path.isdir(folder):
             try:
@@ -150,7 +157,7 @@ def load_model(file_source):
     orders["Order_Date_dt"] = pd.to_datetime(orders["Order_Date"], dayfirst=True, errors="coerce")
     for c in ["Order_Total", "Order_Subtotal", "Discount", "Shipping", "Total_Line_Items"]:
         if c in orders.columns:
-            orders[c] = pd.to_numeric(orders[c], errors="coerce").fillna(0)
+            orders[c] = pd.to_numeric(orders[c], errors="coerce").fillna(0.0)
 
     pm = orders["Payment_Method"].fillna("Unknown").astype(str)
     orders["Payment_Category"] = np.where(
@@ -160,7 +167,7 @@ def load_model(file_source):
     )
 
     disp["Dispatch_Date_dt"] = pd.to_datetime(disp["Dispatch_Date"], dayfirst=True, errors="coerce")
-    disp["Amount"] = pd.to_numeric(disp.get("Amount", 0), errors="coerce").fillna(0)
+    disp["Amount"] = pd.to_numeric(disp.get("Amount", 0), errors="coerce").fillna(0.0)
     disp["Is_Delivered"] = disp.get("Is_Delivered", False).astype(bool)
     disp["Is_RTO"] = disp.get("Is_RTO", False).astype(bool)
 
@@ -168,7 +175,7 @@ def load_model(file_source):
 
 # Sidebar
 with st.sidebar:
-    st.markdown("### ✨ Executive Report")
+    st.markdown("### 👗 ARTH LIFE Shopify")
     st.caption("Kids Fashion E-Commerce Analytics")
     st.divider()
 
@@ -195,9 +202,9 @@ with st.sidebar:
     min_d = valid_order_dates.min().date()
     max_d = valid_order_dates.max().date()
 
-    st.markdown("#### 📅 Date Selection")
+    st.markdown("#### 📅 Quick Date Preset")
     preset = st.selectbox(
-        "Select Period / Preset",
+        "Select Preset",
         ["Custom Dates", "01 Oct – 05 Nov 2026", "01 Sep – 14 Sep 2026", "All Available Dates"],
         index=0
     )
@@ -214,18 +221,41 @@ with st.sidebar:
         init_start = min(max(datetime.date(2026, 10, 1), min_d), max_d)
         init_end = max(min(datetime.date(2026, 11, 5), max_d), min_d)
 
-    start_date = st.date_input("From Date (Start)", value=init_start, min_value=min_d, max_value=max_d)
-    end_date = st.date_input("To Date (End)", value=init_end, min_value=min_d, max_value=max_d)
-
-    if start_date > end_date:
-        st.error("❌ Start Date ही End Date पेक्षा लहान किंवा समान असावी.")
-        st.stop()
-
     all_regions = sorted(df_orders["Customer_Region"].dropna().unique().tolist())
     sel_regions = st.multiselect("🌍 Filter Region", all_regions, default=all_regions)
 
 # ==============================================================================
-# 3. FILTER & COMPUTE ACCURATE METRICS (BY ORDER CREATED DATE)
+# 3. TOP BANNER & UNIFIED DATE SELECTION BAR (SINGLE SOURCE OF TRUTH)
+# ==============================================================================
+ds_col1, ds_col2, ds_col3 = st.columns([1, 1, 2.2])
+with ds_col1:
+    start_date = st.date_input("📅 Start Date", value=init_start, min_value=min_d, max_value=max_d, key="unified_start_date")
+with ds_col2:
+    end_date = st.date_input("📅 End Date", value=init_end, min_value=min_d, max_value=max_d, key="unified_end_date")
+with ds_col3:
+    st.markdown(
+        f"<div style='padding-top:28px; font-size:13px; color:#475569;'>"
+        f"<b>Orders Created Window:</b> {start_date.strftime('%d %b %Y')} — {end_date.strftime('%d %b %Y')} "
+        f"(Available: {min_d.strftime('%d %b %Y')} to {max_d.strftime('%d %b %Y')})</div>",
+        unsafe_allow_html=True
+    )
+
+if start_date > end_date:
+    st.error("❌ Start Date ही End Date पेक्षा लहान किंवा समान असावी.")
+    st.stop()
+
+st.markdown(f"""
+<div class="exec-banner">
+    <div>
+        <div class="exec-title">👗 ARTH LIFE Kids Fashion — Shopify Analysis</div>
+        <div class="exec-sub">Order-to-Delivery, Gross & Net Revenue, Discount, Shipping, RTO & Exchange Review</div>
+    </div>
+    <div class="exec-pill">📅 Created: {start_date.strftime('%d %b %Y')} — {end_date.strftime('%d %b %Y')}</div>
+</div>
+""", unsafe_allow_html=True)
+
+# ==============================================================================
+# 4. FILTER & COMPUTE ACCURATE METRICS (SINGLE PASS BY ORDER CREATED DATE)
 # ==============================================================================
 p_orders = df_orders[
     (df_orders["Order_Date_dt"].dt.date >= start_date) &
@@ -233,21 +263,21 @@ p_orders = df_orders[
     (df_orders["Customer_Region"].isin(sel_regions))
 ].copy()
 
-period_ids = set(p_orders["Base_Order_ID"])
+period_ids = set(p_orders["Base_Order_ID"].dropna())
 
 p_disp = df_disp[df_disp["Base_Order_ID"].isin(period_ids)].copy()
-p_disp = p_disp.merge(
-    p_orders[["Base_Order_ID", "Order_Date", "Order_Date_dt", "Payment_Category", "Order_Total", "Order_Notes", "Customer_Name"]],
-    on="Base_Order_ID", how="left"
-)
-
-status_u = p_disp["Shipment_Status"].fillna("").astype(str).str.strip().str.upper() if not p_disp.empty else pd.Series(dtype=str)
-has_del = (p_disp["Delivered_Date"].notna() & (p_disp["Delivered_Date"].astype(str).str.strip() != "")) if not p_disp.empty else pd.Series(dtype=bool)
-is_rto = p_disp["Is_RTO"].astype(bool) if not p_disp.empty else pd.Series(dtype=bool)
-is_del = p_disp["Is_Delivered"].astype(bool) if not p_disp.empty else pd.Series(dtype=bool)
-is_bad = status_u.isin(["CANCELLED", "CANCELED", "LOST"]) if not p_disp.empty else pd.Series(dtype=bool)
 
 if not p_disp.empty:
+    p_disp = p_disp.merge(
+        p_orders[["Base_Order_ID", "Order_Date", "Order_Date_dt", "Payment_Category", "Order_Total", "Order_Notes", "Customer_Name"]],
+        on="Base_Order_ID", how="left"
+    )
+    status_u = p_disp["Shipment_Status"].fillna("").astype(str).str.strip().str.upper()
+    has_del = p_disp["Delivered_Date"].notna() & (p_disp["Delivered_Date"].astype(str).str.strip() != "")
+    is_rto = p_disp["Is_RTO"].astype(bool)
+    is_del = p_disp["Is_Delivered"].astype(bool)
+    is_bad = status_u.isin(["CANCELLED", "CANCELED", "LOST"])
+
     p_disp["True_Delivered"] = (is_del | (status_u.isin(["SHIPPED", "PROCESSING", "OUT_FOR_DELIVERY"]) & has_del)) & (~is_rto) & (~is_bad)
     p_disp["True_Undelivered"] = (~p_disp["True_Delivered"]) & (~is_rto) & (~is_bad) & (status_u == "UNDELIVERED")
     p_disp["True_In_Transit"] = (~p_disp["True_Delivered"]) & (~is_rto) & (~is_bad) & (status_u != "UNDELIVERED")
@@ -265,85 +295,35 @@ else:
     p_disp["True_Cancelled_Lost"] = pd.Series(dtype=bool)
     p_disp["RTO_Pending_Hub"] = pd.Series(dtype=bool)
 
-dispatched_ids = set(p_disp["Base_Order_ID"]) if not p_disp.empty else set()
+dispatched_ids = set(p_disp["Base_Order_ID"].dropna()) if not p_disp.empty else set()
 not_dispatched = p_orders[~p_orders["Base_Order_ID"].isin(dispatched_ids)].copy()
 
-del_oids = set(p_disp[p_disp["True_Delivered"]]["Base_Order_ID"]) if not p_disp.empty else set()
-rto_oids = (set(p_disp[p_disp["Is_RTO"]]["Base_Order_ID"]) - del_oids) if not p_disp.empty else set()
+del_oids = set(p_disp[p_disp["True_Delivered"]]["Base_Order_ID"].dropna()) if not p_disp.empty else set()
+rto_oids = (set(p_disp[p_disp["Is_RTO"]]["Base_Order_ID"].dropna()) - del_oids) if not p_disp.empty else set()
 rto_pending_hub_df = p_disp[p_disp["RTO_Pending_Hub"]].copy() if not p_disp.empty else pd.DataFrame()
-rto_pending_hub_oids = set(rto_pending_hub_df["Base_Order_ID"]) if not rto_pending_hub_df.empty else set()
-int_oids = (set(p_disp[p_disp["True_In_Transit"]]["Base_Order_ID"]) - del_oids - rto_oids) if not p_disp.empty else set()
+rto_pending_hub_oids = set(rto_pending_hub_df["Base_Order_ID"].dropna()) if not rto_pending_hub_df.empty else set()
+int_oids = (set(p_disp[p_disp["True_In_Transit"]]["Base_Order_ID"].dropna()) - del_oids - rto_oids) if not p_disp.empty else set()
 
 p_rev = df_rev[df_rev["Base_Order_ID"].isin(period_ids)].copy() if not df_rev.empty else pd.DataFrame()
 
 # ==============================================================================
-# 4. TOP BANNER & DIRECT DATE SELECTION BAR
+# 5. EXECUTIVE KPI CARDS (UNIQUE COUNTS & FINANCIAL METRICS)
 # ==============================================================================
-st.markdown(f"""
-<div class="exec-banner">
-    <div>
-        <div class="exec-title">👗 Kids Fashion E-Commerce — Executive Analysis</div>
-        <div class="exec-sub">Order-to-Delivery, Revenue, Discount, Shipping, RTO & Exchange Review</div>
-    </div>
-    <div class="exec-pill">📅 {start_date.strftime('%d %b %Y')} — {end_date.strftime('%d %b %Y')}</div>
-</div>
-""", unsafe_allow_html=True)
+if not p_orders.empty and "Base_Order_ID" in p_orders.columns:
+    p_orders_uniq = p_orders.drop_duplicates(subset=["Base_Order_ID"]).copy()
+    tot_ord = int(p_orders["Base_Order_ID"].nunique())
+else:
+    p_orders_uniq = p_orders.copy()
+    tot_ord = len(p_orders)
 
-with st.container():
-    ds_col1, ds_col2, ds_col3 = st.columns([1, 1, 2])
-    with ds_col1:
-        start_date = st.date_input("📅 Start Date", value=start_date, min_value=min_d, max_value=max_d, key="main_start_date")
-    with ds_col2:
-        end_date = st.date_input("📅 End Date", value=end_date, min_value=min_d, max_value=max_d, key="main_end_date")
-    with ds_col3:
-        st.markdown(f"<div style='padding-top:28px; font-size:13px; color:#475569;'><b>Selected Window:</b> {start_date.strftime('%d %b %Y')} ते {end_date.strftime('%d %b %Y')} (डेटा उपलब्ध: {min_d.strftime('%d %b %Y')} — {max_d.strftime('%d %b %Y')})</div>", unsafe_allow_html=True)
+gross_rev = float(p_orders_uniq["Order_Total"].sum()) if len(p_orders_uniq) > 0 else 0.0
+tot_disc = float(p_orders_uniq["Discount"].sum()) if ("Discount" in p_orders_uniq.columns and len(p_orders_uniq) > 0) else 0.0
+tot_ship = float(p_orders_uniq["Shipping"].sum()) if ("Shipping" in p_orders_uniq.columns and len(p_orders_uniq) > 0) else 0.0
 
-if start_date > end_date:
-    st.error("❌ Start Date ही End Date पेक्षा लहान किंवा समान असावी.")
-    st.stop()
+rto_rev = float(p_orders_uniq[p_orders_uniq["Base_Order_ID"].isin(rto_oids)]["Order_Total"].sum()) if len(p_orders_uniq) > 0 else 0.0
+net_rev = max(gross_rev - rto_rev - tot_ship, 0.0)
+realized_deliv_rev = float(p_orders_uniq[p_orders_uniq["Base_Order_ID"].isin(del_oids)]["Order_Total"].sum()) if len(p_orders_uniq) > 0 else 0.0
 
-# Re-apply date filter with any main-screen date change
-p_orders = df_orders[
-    (df_orders["Order_Date_dt"].dt.date >= start_date) &
-    (df_orders["Order_Date_dt"].dt.date <= end_date) &
-    (df_orders["Customer_Region"].isin(sel_regions))
-].copy()
-period_ids = set(p_orders["Base_Order_ID"])
-p_disp = df_disp[df_disp["Base_Order_ID"].isin(period_ids)].copy()
-if not p_disp.empty:
-    p_disp = p_disp.merge(
-        p_orders[["Base_Order_ID", "Order_Date", "Order_Date_dt", "Payment_Category", "Order_Total", "Order_Notes", "Customer_Name"]],
-        on="Base_Order_ID", how="left"
-    )
-    status_u = p_disp["Shipment_Status"].fillna("").astype(str).str.strip().str.upper()
-    has_del = p_disp["Delivered_Date"].notna() & (p_disp["Delivered_Date"].astype(str).str.strip() != "")
-    is_rto = p_disp["Is_RTO"].astype(bool)
-    is_del = p_disp["Is_Delivered"].astype(bool)
-    is_bad = status_u.isin(["CANCELLED", "CANCELED", "LOST"])
-    p_disp["True_Delivered"] = (is_del | (status_u.isin(["SHIPPED", "PROCESSING", "OUT_FOR_DELIVERY"]) & has_del)) & (~is_rto) & (~is_bad)
-    p_disp["True_Undelivered"] = (~p_disp["True_Delivered"]) & (~is_rto) & (~is_bad) & (status_u == "UNDELIVERED")
-    p_disp["True_In_Transit"] = (~p_disp["True_Delivered"]) & (~is_rto) & (~is_bad) & (status_u != "UNDELIVERED")
-    p_disp["True_Cancelled_Lost"] = is_bad
-    received_hub_tokens = {
-        "RTO DELIVERED", "RTO_DELIVERED", "DELIVERED TO HUB", "RECEIVED AT HUB",
-        "RETURN DELIVERED", "RET DELIVERED", "RTO RECEIVED"
-    }
-    p_disp["RTO_Pending_Hub"] = is_rto & (~has_del) & (~status_u.isin(received_hub_tokens))
-not_dispatched = p_orders[~p_orders["Base_Order_ID"].isin(set(p_disp["Base_Order_ID"]) if not p_disp.empty else set())].copy()
-del_oids = set(p_disp[p_disp["True_Delivered"]]["Base_Order_ID"]) if not p_disp.empty else set()
-rto_oids = (set(p_disp[p_disp["Is_RTO"]]["Base_Order_ID"]) - del_oids) if not p_disp.empty else set()
-rto_pending_hub_df = p_disp[p_disp["RTO_Pending_Hub"]].copy() if not p_disp.empty else pd.DataFrame()
-rto_pending_hub_oids = set(rto_pending_hub_df["Base_Order_ID"]) if not rto_pending_hub_df.empty else set()
-int_oids = (set(p_disp[p_disp["True_In_Transit"]]["Base_Order_ID"]) - del_oids - rto_oids) if not p_disp.empty else set()
-p_rev = df_rev[df_rev["Base_Order_ID"].isin(period_ids)].copy() if not df_rev.empty else pd.DataFrame()
-
-# ==============================================================================
-# 5. EXECUTIVE KPI CARDS
-# ==============================================================================
-tot_ord = len(p_orders)
-gross_rev = float(p_orders["Order_Total"].sum()) if tot_ord > 0 else 0.0
-tot_disc = float(p_orders["Discount"].sum()) if ("Discount" in p_orders.columns and tot_ord > 0) else 0.0
-tot_ship = float(p_orders["Shipping"].sum()) if ("Shipping" in p_orders.columns and tot_ord > 0) else 0.0
 aov = gross_rev / tot_ord if tot_ord > 0 else 0.0
 disp_cnt = len(dispatched_ids)
 deliv_cnt = len(del_oids)
@@ -352,14 +332,18 @@ rto_cnt = len(rto_oids)
 rto_pct = (rto_cnt / disp_cnt * 100) if disp_cnt > 0 else 0.0
 rto_hub_parcels = int(p_disp["RTO_Pending_Hub"].sum()) if not p_disp.empty else 0
 rto_hub_orders = len(rto_pending_hub_oids)
-exch_cnt = len(p_rev)
 
-k1, k2, k3, k4 = st.columns(4)
+if not p_rev.empty and "Base_Order_ID" in p_rev.columns:
+    exch_cnt = int(p_rev["Base_Order_ID"].nunique())
+else:
+    exch_cnt = len(p_rev)
+
+k1, k2, k3, k4, k5 = st.columns(5)
 with k1:
     st.markdown(f"""
     <div class="kpi-card">
         <div>
-            <div class="kpi-lbl">Orders Created</div>
+            <div class="kpi-lbl">Unique Orders</div>
             <div class="kpi-val">{tot_ord:,}</div>
             <span class="kpi-tag" style="background:#EEF2FF; color:#4F46E5;">{int(p_orders['Total_Line_Items'].sum()) if tot_ord>0 else 0:,} Items</span>
         </div>
@@ -381,6 +365,17 @@ with k3:
     st.markdown(f"""
     <div class="kpi-card">
         <div>
+            <div class="kpi-lbl">Net Revenue</div>
+            <div class="kpi-val">₹{net_rev:,.2f}</div>
+            <span class="kpi-tag" style="background:#ECFDF5; color:#059669;">Delivered: ₹{realized_deliv_rev:,.0f}</span>
+        </div>
+        <div class="kpi-ico" style="background:#ECFDF5;">📈</div>
+    </div>""", unsafe_allow_html=True)
+
+with k4:
+    st.markdown(f"""
+    <div class="kpi-card">
+        <div>
             <div class="kpi-lbl">Total Discount</div>
             <div class="kpi-val">₹{tot_disc:,.2f}</div>
             <span class="kpi-tag" style="background:#FDF2F8; color:#BE185D;">{tot_disc/max(gross_rev+tot_disc,1)*100:.1f}% Disc. Share</span>
@@ -388,7 +383,7 @@ with k3:
         <div class="kpi-ico" style="background:#FDF2F8;">🏷️</div>
     </div>""", unsafe_allow_html=True)
 
-with k4:
+with k5:
     st.markdown(f"""
     <div class="kpi-card">
         <div>
@@ -406,9 +401,9 @@ with f1:
     st.markdown(f"""
     <div class="kpi-card">
         <div>
-            <div class="kpi-lbl">Dispatched</div>
+            <div class="kpi-lbl">Unique Dispatched</div>
             <div class="kpi-val">{disp_cnt:,}</div>
-            <span class="kpi-tag" style="background:#ECFEFF; color:#0891B2;">{disp_cnt/max(tot_ord,1)*100:.1f}% of Created</span>
+            <span class="kpi-tag" style="background:#ECFEFF; color:#0891B2;">{disp_cnt/max(tot_ord,1)*100:.1f}% of Orders</span>
         </div>
         <div class="kpi-ico" style="background:#ECFEFF;">📦</div>
     </div>""", unsafe_allow_html=True)
@@ -417,7 +412,7 @@ with f2:
     st.markdown(f"""
     <div class="kpi-card">
         <div>
-            <div class="kpi-lbl">True Delivered</div>
+            <div class="kpi-lbl">Unique Delivered</div>
             <div class="kpi-val">{deliv_cnt:,}</div>
             <span class="kpi-tag" style="background:#ECFDF5; color:#059669;">▲ {deliv_pct:.1f}% Success</span>
         </div>
@@ -428,7 +423,7 @@ with f3:
     st.markdown(f"""
     <div class="kpi-card">
         <div>
-            <div class="kpi-lbl">Pure RTO / Exch</div>
+            <div class="kpi-lbl">Unique RTO / Exch</div>
             <div class="kpi-val">{rto_cnt:,} / {exch_cnt:,}</div>
             <span class="kpi-tag" style="background:#FEF2F2; color:#DC2626;">RTO: {rto_pct:.1f}%</span>
         </div>
@@ -457,7 +452,7 @@ if p_orders.empty:
 # ==============================================================================
 tab1, tab2, tab3, tab4 = st.tabs([
     "📈 Executive Overview & Funnel",
-    "↩️ RTO & Exchange Analysis",
+    "↩️ RTO & Exchange Status Analysis",
     "👗 Products, Age Groups & Regions",
     "📋 Actionable Tables (RTO Hub Pending, In-Transit & Unshipped)"
 ])
@@ -466,9 +461,9 @@ with tab1:
     c_left, c_right = st.columns([1.85, 1.15])
 
     with c_left:
-        st.markdown('<div class="card-box"><div class="card-title">📊 Daily Orders & Revenue Trend</div>', unsafe_allow_html=True)
-        daily = p_orders.groupby("Order_Date_dt").agg(
-            Orders=("Base_Order_ID", "count"),
+        st.markdown('<div class="card-box"><div class="card-title">📊 Daily Unique Orders & Revenue Trend</div>', unsafe_allow_html=True)
+        daily = p_orders_uniq.groupby("Order_Date_dt").agg(
+            Orders=("Base_Order_ID", "nunique"),
             Revenue=("Order_Total", "sum")
         ).reset_index().sort_values("Order_Date_dt")
         daily["Date_Label"] = daily["Order_Date_dt"].dt.strftime("%d %b")
@@ -477,11 +472,11 @@ with tab1:
         fig_dual = make_subplots(specs=[[{"secondary_y": True}]])
         fig_dual.add_trace(
             go.Bar(
-                x=daily["Date_Label"], y=daily["Orders"], name="Orders",
+                x=daily["Date_Label"], y=daily["Orders"], name="Unique Orders",
                 marker=dict(color="#6366F1", cornerradius=6), opacity=0.82,
                 text=daily["Orders"], textposition="outside",
                 textfont=dict(size=10, color="#312E81", family="Plus Jakarta Sans"),
-                hovertemplate="<b>%{x}</b><br>Orders: %{y:,}<extra></extra>"
+                hovertemplate="<b>%{x}</b><br>Unique Orders: %{y:,}<extra></extra>"
             ),
             secondary_y=False
         )
@@ -504,7 +499,7 @@ with tab1:
             font=dict(family="Plus Jakarta Sans", color="#334155")
         )
         fig_dual.update_xaxes(tickangle=-45, tickfont=dict(size=11, color="#475569"), nticks=18, showgrid=False)
-        fig_dual.update_yaxes(title_text="Orders Count", range=[0, max_ord_y], showgrid=True, gridcolor="#F1F5F9", zeroline=False, secondary_y=False)
+        fig_dual.update_yaxes(title_text="Unique Orders", range=[0, max_ord_y], showgrid=True, gridcolor="#F1F5F9", zeroline=False, secondary_y=False)
         fig_dual.update_yaxes(title_text="Revenue (₹ Lakhs)", range=[0, max_rev_y], showgrid=False, zeroline=False, secondary_y=True)
         st.plotly_chart(fig_dual, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
@@ -534,15 +529,63 @@ with tab1:
 with tab2:
     st.markdown(f"""
     <div class="insight-box">
-        💡 <b>Selected Period RTO & Exchange Summary ({start_date.strftime('%d %b %Y')} — {end_date.strftime('%d %b %Y')}):</b>
-        Pure RTO Orders = <b>{rto_cnt:,}</b> (Pending to Hub = <b>{rto_hub_orders:,}</b> orders / <b>{rto_hub_parcels:,}</b> parcels) and Reverse Logistics / Exchanges = <b>{exch_cnt:,}</b>.
+        💡 <b>Selected Created Orders Window ({start_date.strftime('%d %b %Y')} — {end_date.strftime('%d %b %Y')}):</b>
+        Unique RTO Orders = <b>{rto_cnt:,}</b> (Pending to Hub = <b>{rto_hub_orders:,}</b> unique orders / <b>{rto_hub_parcels:,}</b> parcels) ·
+        Unique Exchanges (<code>Fact_Reverse_Logistics</code>) = <b>{exch_cnt:,}</b> · RTO Value = <b>₹{rto_rev:,.2f}</b>.
     </div>
     """, unsafe_allow_html=True)
 
-    e1, e2 = st.columns(2)
-    with e1:
-        st.markdown('<div class="card-box"><div class="card-title">↩️ RTO & Exchange Count by Month (Selected Window)</div>', unsafe_allow_html=True)
+    d1, d2 = st.columns(2)
+    with d1:
+        st.markdown('<div class="card-box"><div class="card-title">🍩 RTO & Exchange Status Breakdown (Donut Chart)</div>', unsafe_allow_html=True)
         rto_sub = p_disp[p_disp["Is_RTO"] & (~p_disp["Base_Order_ID"].isin(del_oids))].copy() if not p_disp.empty else pd.DataFrame()
+        rto_received_cnt = int(rto_sub[~rto_sub["RTO_Pending_Hub"]]["Base_Order_ID"].nunique()) if not rto_sub.empty else 0
+        rto_pending_cnt = int(rto_sub[rto_sub["RTO_Pending_Hub"]]["Base_Order_ID"].nunique()) if not rto_sub.empty else 0
+
+        donut_items = []
+        if rto_pending_cnt > 0:
+            donut_items.append(("RTO — Pending to Hub (Unique)", rto_pending_cnt))
+        if rto_received_cnt > 0:
+            donut_items.append(("RTO — Received at Hub (Unique)", rto_received_cnt))
+
+        if not p_rev.empty:
+            p_rev_u = p_rev.drop_duplicates(subset=["Base_Order_ID"]) if "Base_Order_ID" in p_rev.columns else p_rev
+            status_col = next((c for c in ["Return_Status", "Exchange_Status", "Status", "Shipment_Status", "Reason"] if c in p_rev_u.columns), None)
+            if status_col:
+                rev_vc = p_rev_u[status_col].fillna("Exchange (Recorded)").astype(str).str.strip()
+                rev_vc = rev_vc.replace("", "Exchange (Recorded)").value_counts()
+                for st_name, cnt in rev_vc.items():
+                    donut_items.append((f"Exchange — {st_name}", int(cnt)))
+            else:
+                donut_items.append(("Exchange / Reverse Logistics (Unique)", len(p_rev_u)))
+
+        if donut_items:
+            dn_df = pd.DataFrame(donut_items, columns=["Status", "Count"])
+            donut_colors = ["#EA580C", "#EF4444", "#8B5CF6", "#0EA5E9", "#10B981", "#F59E0B", "#EC4899"]
+            fig_donut = go.Figure(go.Pie(
+                labels=dn_df["Status"],
+                values=dn_df["Count"],
+                hole=0.55,
+                textinfo="label+value+percent",
+                textposition="outside",
+                marker=dict(colors=donut_colors[:len(dn_df)], line=dict(color="#FFFFFF", width=2)),
+                hovertemplate="<b>%{label}</b><br>Unique Count: %{value:,}<br>Share: %{percent}<extra></extra>"
+            ))
+            fig_donut.update_layout(
+                height=380,
+                margin=dict(l=20, r=20, t=25, b=25),
+                paper_bgcolor="rgba(0,0,0,0)",
+                showlegend=True,
+                legend=dict(orientation="h", yanchor="bottom", y=-0.22, xanchor="center", x=0.5),
+                annotations=[dict(text=f"<b>{dn_df['Count'].sum():,}</b><br>Unique", x=0.5, y=0.5, font_size=15, showarrow=False)]
+            )
+            st.plotly_chart(fig_donut, use_container_width=True)
+        else:
+            st.info("निवडलेल्या तारीख रेंजमध्ये कोणतेही RTO किंवा Exchange रेकॉर्ड्स नाहीत.")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with d2:
+        st.markdown('<div class="card-box"><div class="card-title">↩️ Monthly Unique RTO & Exchange Count</div>', unsafe_allow_html=True)
         if not rto_sub.empty and "Order_Date_dt" in rto_sub.columns:
             rto_sub["Month_Lbl"] = rto_sub["Order_Date_dt"].dt.to_period("M").astype(str)
             m_rto = rto_sub.groupby("Month_Lbl")["Base_Order_ID"].nunique().reset_index(name="RTO_Orders")
@@ -550,12 +593,12 @@ with tab2:
             m_rto = pd.DataFrame({"Month_Lbl": [start_date.strftime("%Y-%m")], "RTO_Orders": [0]})
 
         if not p_rev.empty:
-            rev_merged = p_rev.merge(p_orders[["Base_Order_ID", "Order_Date_dt"]], on="Base_Order_ID", how="left")
+            rev_merged = p_rev.merge(p_orders_uniq[["Base_Order_ID", "Order_Date_dt"]], on="Base_Order_ID", how="left")
             if "Order_Date_dt" in rev_merged.columns and rev_merged["Order_Date_dt"].notna().any():
                 rev_merged["Month_Lbl"] = rev_merged["Order_Date_dt"].dt.to_period("M").astype(str)
-                m_exch = rev_merged.groupby("Month_Lbl").size().reset_index(name="Exchange_Count")
+                m_exch = rev_merged.groupby("Month_Lbl")["Base_Order_ID"].nunique().reset_index(name="Exchange_Count")
             else:
-                m_exch = pd.DataFrame({"Month_Lbl": [start_date.strftime("%Y-%m")], "Exchange_Count": [len(p_rev)]})
+                m_exch = pd.DataFrame({"Month_Lbl": [start_date.strftime("%Y-%m")], "Exchange_Count": [exch_cnt]})
         else:
             m_exch = pd.DataFrame({"Month_Lbl": m_rto["Month_Lbl"].tolist(), "Exchange_Count": [0] * len(m_rto)})
 
@@ -564,30 +607,18 @@ with tab2:
         me_df["Exchange_Count"] = me_df["Exchange_Count"].astype(int)
 
         fig_me = go.Figure()
-        fig_me.add_trace(go.Bar(x=me_df["Month_Lbl"], y=me_df["RTO_Orders"], name="RTO Orders", marker=dict(color="#EF4444", cornerradius=8), text=me_df["RTO_Orders"], textposition="outside"))
-        fig_me.add_trace(go.Bar(x=me_df["Month_Lbl"], y=me_df["Exchange_Count"], name="Exchanges", marker=dict(color="#8B5CF6", cornerradius=8), text=me_df["Exchange_Count"], textposition="outside"))
+        fig_me.add_trace(go.Bar(x=me_df["Month_Lbl"], y=me_df["RTO_Orders"], name="Unique RTO Orders", marker=dict(color="#EF4444", cornerradius=8), text=me_df["RTO_Orders"], textposition="outside"))
+        fig_me.add_trace(go.Bar(x=me_df["Month_Lbl"], y=me_df["Exchange_Count"], name="Unique Exchanges", marker=dict(color="#8B5CF6", cornerradius=8), text=me_df["Exchange_Count"], textposition="outside"))
         max_me_y = max(me_df["RTO_Orders"].max(), me_df["Exchange_Count"].max(), 1) * 1.25
-        fig_me.update_layout(barmode="group", height=350, margin=dict(l=10, r=10, t=30, b=15), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", yaxis=dict(range=[0, max_me_y], showgrid=True, gridcolor="#F1F5F9", title="Count"), legend=dict(orientation="h", yanchor="bottom", y=1.03, xanchor="right", x=1))
+        fig_me.update_layout(barmode="group", height=380, margin=dict(l=10, r=10, t=30, b=15), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", yaxis=dict(range=[0, max_me_y], showgrid=True, gridcolor="#F1F5F9", title="Unique Count"), legend=dict(orientation="h", yanchor="bottom", y=1.03, xanchor="right", x=1))
         st.plotly_chart(fig_me, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with e2:
-        st.markdown('<div class="card-box"><div class="card-title">📅 Daily RTO Trend (Selected Date Range)</div>', unsafe_allow_html=True)
-        if not rto_sub.empty and "Order_Date_dt" in rto_sub.columns:
-            d_rto = rto_sub.groupby(rto_sub["Order_Date_dt"].dt.date)["Base_Order_ID"].nunique().reset_index(name="RTO_Count").sort_values("Order_Date_dt")
-            d_rto["Date_Lbl"] = pd.to_datetime(d_rto["Order_Date_dt"]).dt.strftime("%d %b")
-            fig_dr = go.Figure(go.Bar(x=d_rto["Date_Lbl"], y=d_rto["RTO_Count"], name="RTO Orders", marker=dict(color="#EA580C", cornerradius=6), text=d_rto["RTO_Count"], textposition="outside"))
-            fig_dr.update_layout(height=350, margin=dict(l=10, r=10, t=30, b=45), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(tickangle=-40, showgrid=False), yaxis=dict(range=[0, max(float(d_rto["RTO_Count"].max()) * 1.25, 3.0)], showgrid=True, gridcolor="#F1F5F9", title="RTO Count"))
-            st.plotly_chart(fig_dr, use_container_width=True)
-        else:
-            st.info("No RTO orders in selected date range.")
         st.markdown('</div>', unsafe_allow_html=True)
 
     r1, r2, r3 = st.columns(3)
     with r1:
-        st.markdown('<div class="card-box"><div class="card-title">💳 COD vs Prepaid — Delivered vs RTO</div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-box"><div class="card-title">💳 COD vs Prepaid — Unique Orders</div>', unsafe_allow_html=True)
         if not p_disp.empty:
-            pay_agg = p_disp.groupby("Payment_Category").agg(Parcels=("Order_ID", "count"), Delivered=("True_Delivered", "sum"), RTO=("Is_RTO", "sum")).reset_index()
+            pay_agg = p_disp.groupby("Payment_Category").agg(Parcels=("Base_Order_ID", "nunique"), Delivered=("True_Delivered", "sum"), RTO=("Is_RTO", "sum")).reset_index()
             pay_agg["Del_Pct"] = (pay_agg["Delivered"] / pay_agg["Parcels"].replace(0, 1) * 100).round(1)
             pay_agg["RTO_Pct"] = (pay_agg["RTO"] / pay_agg["Parcels"].replace(0, 1) * 100).round(1)
             del_labels = [f"<b>{int(d):,}</b><br>({p:.1f}%)" for d, p in zip(pay_agg["Delivered"], pay_agg["Del_Pct"])]
@@ -603,7 +634,7 @@ with tab2:
     with r2:
         st.markdown('<div class="card-box"><div class="card-title">🚚 Carrier Performance (Delhivery vs DTDC)</div>', unsafe_allow_html=True)
         if not p_disp.empty and "Dispatch_Category" in p_disp.columns:
-            carr_agg = p_disp.groupby("Dispatch_Category").agg(Parcels=("Order_ID", "count"), Delivered=("True_Delivered", "sum"), RTO=("Is_RTO", "sum")).reset_index()
+            carr_agg = p_disp.groupby("Dispatch_Category").agg(Parcels=("Base_Order_ID", "nunique"), Delivered=("True_Delivered", "sum"), RTO=("Is_RTO", "sum")).reset_index()
             carr_agg["Delivery %"] = (carr_agg["Delivered"] / carr_agg["Parcels"].replace(0, 1) * 100).round(1)
             carr_agg["RTO %"] = (carr_agg["RTO"] / carr_agg["Parcels"].replace(0, 1) * 100).round(1)
             carr_del_lbl = [f"<b>{p:.1f}%</b><br>({int(c):,})" for p, c in zip(carr_agg["Delivery %"], carr_agg["Delivered"])]
@@ -616,16 +647,28 @@ with tab2:
         st.markdown('</div>', unsafe_allow_html=True)
 
     with r3:
-        st.markdown('<div class="card-box"><div class="card-title">🏭 RTO Pending to Hub (By Carrier)</div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-box"><div class="card-title">🏭 RTO Pending to Hub (Unique Orders)</div>', unsafe_allow_html=True)
         if not rto_pending_hub_df.empty and "Dispatch_Category" in rto_pending_hub_df.columns:
             hub_agg = rto_pending_hub_df.groupby("Dispatch_Category").agg(Pending_Parcels=("Order_ID", "count"), Unique_Orders=("Base_Order_ID", "nunique")).reset_index()
-            hub_lbl = [f"<b>{int(p):,}</b> ({int(o):,} ord)" for p, o in zip(hub_agg["Pending_Parcels"], hub_agg["Unique_Orders"])]
-            fig_hub = go.Figure(go.Bar(x=hub_agg["Dispatch_Category"], y=hub_agg["Pending_Parcels"], name="RTO Pending Hub", marker=dict(color="#EA580C", cornerradius=8), text=hub_lbl, textposition="outside"))
-            fig_hub.update_layout(height=340, margin=dict(l=10, r=10, t=30, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", yaxis=dict(range=[0, max(float(hub_agg["Pending_Parcels"].max()) * 1.25, 5.0)], showgrid=True, gridcolor="#F1F5F9"))
+            hub_lbl = [f"<b>{int(o):,} ord</b> ({int(p):,} pcl)" for p, o in zip(hub_agg["Pending_Parcels"], hub_agg["Unique_Orders"])]
+            fig_hub = go.Figure(go.Bar(x=hub_agg["Dispatch_Category"], y=hub_agg["Unique_Orders"], name="RTO Pending Hub (Unique Orders)", marker=dict(color="#EA580C", cornerradius=8), text=hub_lbl, textposition="outside"))
+            fig_hub.update_layout(height=340, margin=dict(l=10, r=10, t=30, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", yaxis=dict(range=[0, max(float(hub_agg["Unique_Orders"].max()) * 1.25, 5.0)], showgrid=True, gridcolor="#F1F5F9"))
             st.plotly_chart(fig_hub, use_container_width=True)
         else:
             st.info("No RTO shipments pending to hub in selected period.")
         st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown(f"#### 🔄 Exchanges (<code>Fact_Reverse_Logistics</code> — {exch_cnt:,} Unique Orders)")
+    if not p_rev.empty:
+        st.dataframe(p_rev, use_container_width=True, height=260, hide_index=True)
+        st.download_button(
+            "⬇️ Download Exchanges (Fact_Reverse_Logistics) CSV",
+            p_rev.to_csv(index=False).encode("utf-8"),
+            f"exchanges_fact_reverse_logistics_{start_date}_{end_date}.csv",
+            "text/csv"
+        )
+    else:
+        st.info("निवडलेल्या तारीख रेंजमधील ऑर्डर्ससाठी `Fact_Reverse_Logistics` मध्ये कोणतेही Exchange रेकॉर्ड्स नाहीत.")
 
 with tab3:
     p1, p2 = st.columns([1.2, 1])
@@ -659,19 +702,17 @@ with tab3:
 
     g1, g2 = st.columns([1, 1.3])
     with g1:
-        st.markdown('<div class="card-box"><div class="card-title">🗺️ Orders by Region</div>', unsafe_allow_html=True)
-        reg_agg = p_orders["Customer_Region"].value_counts().reset_index()
-        reg_agg.columns = ["Region", "Orders"]
-        fig_reg = go.Figure(go.Pie(labels=reg_agg["Region"], values=reg_agg["Orders"], hole=0.52, marker=dict(colors=["#4F46E5", "#EC4899", "#10B981", "#F59E0B", "#0EA5E9", "#8B5CF6"])))
+        st.markdown('<div class="card-box"><div class="card-title">🗺️ Unique Orders by Region</div>', unsafe_allow_html=True)
+        reg_agg = p_orders.groupby("Customer_Region")["Base_Order_ID"].nunique().reset_index(name="Orders").sort_values("Orders", ascending=False)
+        fig_reg = go.Figure(go.Pie(labels=reg_agg["Customer_Region"], values=reg_agg["Orders"], hole=0.52, marker=dict(colors=["#4F46E5", "#EC4899", "#10B981", "#F59E0B", "#0EA5E9", "#8B5CF6"])))
         fig_reg.update_layout(height=300, margin=dict(l=0, r=0, t=10, b=10), paper_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig_reg, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     with g2:
-        st.markdown('<div class="card-box"><div class="card-title">🏙️ Top 8 Cities by Orders</div>', unsafe_allow_html=True)
-        city_agg = p_orders["Shipping_City"].value_counts().head(8).reset_index()
-        city_agg.columns = ["City", "Orders"]
-        fig_city = go.Figure(go.Bar(y=city_agg["City"][::-1], x=city_agg["Orders"][::-1], orientation="h", marker=dict(color="#0EA5E9", cornerradius=8), text=city_agg["Orders"][::-1], textposition="outside"))
+        st.markdown('<div class="card-box"><div class="card-title">🏙️ Top 8 Cities by Unique Orders</div>', unsafe_allow_html=True)
+        city_agg = p_orders.groupby("Shipping_City")["Base_Order_ID"].nunique().reset_index(name="Orders").sort_values("Orders", ascending=False).head(8)
+        fig_city = go.Figure(go.Bar(y=city_agg["Shipping_City"][::-1], x=city_agg["Orders"][::-1], orientation="h", marker=dict(color="#0EA5E9", cornerradius=8), text=city_agg["Orders"][::-1], textposition="outside"))
         fig_city.update_layout(height=300, margin=dict(l=0, r=35, t=10, b=0), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(showgrid=True, gridcolor="#F1F5F9"))
         st.plotly_chart(fig_city, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
