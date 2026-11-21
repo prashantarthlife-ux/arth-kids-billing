@@ -330,7 +330,7 @@ def load_model(file_source):
     disp = pd.read_excel(xls, sheet_name=disp_sheet)
     rev = pd.read_excel(xls, sheet_name=rev_sheet) if rev_sheet else pd.DataFrame()
 
-    orders["Order_Date_dt"] = pd.to_datetime(orders["Order_Date"], dayfirst=True, errors="coerce")
+    orders["Order_Date_dt"] = pd.to_datetime(orders["Order_Date"], format="mixed", dayfirst=True, errors="coerce")
     for c in ["Order_Total", "Order_Subtotal", "Discount", "Shipping", "Total_Line_Items"]:
         if c in orders.columns:
             cleaned_s = orders[c].astype(str).str.replace(",", "", regex=False).str.replace("₹", "", regex=False).str.strip()
@@ -488,6 +488,11 @@ else:
         (df_orders["Order_Date_dt"].dt.date >= start_date) &
         (df_orders["Order_Date_dt"].dt.date <= end_date)
     ].copy()
+
+# Exclude voided orders (`Financial_Status` == "voided") across all KPIs, charts, and tables
+fin_status_col = _find_col(p_orders, ["Financial_Status"])
+if fin_status_col:
+    p_orders = p_orders[p_orders[fin_status_col].fillna("").astype(str).str.strip().str.lower() != "voided"].copy()
 
 base_oid_col = _find_col(p_orders, ["Base_Order_ID", "Order_ID", "Name"])
 period_ids = set(p_orders[base_oid_col].dropna()) if base_oid_col else set()
@@ -797,6 +802,24 @@ with tab1:
         fig_dual.update_yaxes(title_text="Unique Orders", range=[0, max_ord_y], showgrid=True, gridcolor="#F1F5F9", zeroline=False, secondary_y=False)
         fig_dual.update_yaxes(title_text="Revenue (₹ Lakhs)", range=[0, max_rev_y], showgrid=False, zeroline=False, secondary_y=True)
         st.plotly_chart(fig_dual, use_container_width=True)
+        st.markdown('<div style="font-size:13px; font-weight:700; color:#334155; margin-top:10px; margin-bottom:6px;">📋 Day-Wise Orders & Exact Revenue Verification</div>', unsafe_allow_html=True)
+        d_verify = p_orders_uniq.groupby("Order_Date_Only").agg(
+            Unique_Orders=(base_oid_col, "nunique"),
+            Revenue_INR=("Order_Total", "sum"),
+            Discount_INR=("Discount", "sum") if "Discount" in p_orders_uniq.columns else ("Order_Total", lambda s: 0.0),
+            Shipping_INR=("Shipping", "sum") if "Shipping" in p_orders_uniq.columns else ("Order_Total", lambda s: 0.0),
+        ).reset_index().sort_values("Order_Date_Only")
+        d_verify["Date"] = pd.to_datetime(d_verify["Order_Date_Only"]).dt.strftime("%d %b %Y")
+        d_verify["AOV_INR"] = np.where(d_verify["Unique_Orders"] > 0, (d_verify["Revenue_INR"] / d_verify["Unique_Orders"]).round(0), 0)
+        d_verify["Revenue_INR"] = d_verify["Revenue_INR"].round(2)
+        d_verify["Discount_INR"] = d_verify["Discount_INR"].round(2)
+        d_verify["Shipping_INR"] = d_verify["Shipping_INR"].round(2)
+        st.dataframe(
+            d_verify[["Date", "Unique_Orders", "Revenue_INR", "AOV_INR", "Discount_INR", "Shipping_INR"]],
+            use_container_width=True,
+            height=210,
+            hide_index=True
+        )
         st.markdown('</div>', unsafe_allow_html=True)
 
     with c_right:
