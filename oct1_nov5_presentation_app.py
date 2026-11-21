@@ -7,7 +7,7 @@ from plotly.subplots import make_subplots
 import streamlit as st
 
 # ==============================================================================
-# 1. PAGE CONFIG & ATTRACTIVE EXECUTIVE SAAS STYLING
+# 1. PAGE CONFIG & EXECUTIVE SAAS STYLING
 # ==============================================================================
 st.set_page_config(
     page_title="ARTH LIFE Kids Fashion — Shopify Analysis",
@@ -41,6 +41,34 @@ section[data-testid="stSidebar"] {
     border-right: 1px solid #E6EAF2;
 }
 
+/* Login Card Styling */
+.login-wrap {
+    max-width: 440px;
+    margin: 60px auto 20px auto;
+    background: #FFFFFF;
+    border-radius: 24px;
+    padding: 36px 34px;
+    box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+    border: 1px solid #E6EAF2;
+    text-align: center;
+}
+.login-badge {
+    width: 68px;
+    height: 68px;
+    margin: 0 auto 14px auto;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #312E81 0%, #7C3AED 100%);
+    color: #FFFFFF;
+    font-size: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 10px 22px rgba(124, 58, 237, 0.25);
+}
+.login-title { font-size: 22px; font-weight: 800; color: #0F172A; margin: 0; }
+.login-sub   { font-size: 13px; color: #64748B; margin-top: 5px; margin-bottom: 18px; }
+
+/* Executive Banner */
 .exec-banner {
     background: linear-gradient(135deg, #0F172A 0%, #312E81 55%, #7C3AED 100%);
     border-radius: 22px;
@@ -63,12 +91,13 @@ section[data-testid="stSidebar"] {
     font-weight: 700;
 }
 
+/* Section Headers */
 .sec-header-rto {
     background: linear-gradient(90deg, #FFF1F2 0%, #FFFFFF 100%);
     border-left: 5px solid #EF4444;
     border-radius: 14px;
     padding: 14px 20px;
-    margin-top: 12px;
+    margin-top: 14px;
     margin-bottom: 14px;
     border-top: 1px solid #FFE4E6;
     border-right: 1px solid #FFE4E6;
@@ -79,7 +108,7 @@ section[data-testid="stSidebar"] {
     border-left: 5px solid #8B5CF6;
     border-radius: 14px;
     padding: 14px 20px;
-    margin-top: 20px;
+    margin-top: 22px;
     margin-bottom: 14px;
     border-top: 1px solid #EDE9FE;
     border-right: 1px solid #EDE9FE;
@@ -88,23 +117,53 @@ section[data-testid="stSidebar"] {
 .sec-title { font-size: 18px; font-weight: 800; color: #0F172A; margin: 0; }
 .sec-sub   { font-size: 12.5px; color: #64748B; margin-top: 2px; }
 
+/* KPI Cards with Larger, Crisp Icons */
 .kpi-card {
     background: #FFFFFF;
-    border-radius: 16px;
-    padding: 17px 19px;
-    box-shadow: 0 6px 20px rgba(15, 23, 42, 0.04);
+    border-radius: 18px;
+    padding: 18px 20px;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
     border: 1px solid #E6EAF2;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 12px;
     transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
-.kpi-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08); }
-.kpi-lbl  { font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.4px; }
-.kpi-val  { font-size: 22px; font-weight: 800; color: #0F172A; margin: 4px 0; letter-spacing: -0.5px; }
-.kpi-tag  { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
-.kpi-ico  { width: 42px; height: 42px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+.kpi-card:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(15, 23, 42, 0.10); }
+.kpi-lbl  { font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.45px; }
+.kpi-val  { font-size: 22px; font-weight: 800; color: #0F172A; margin: 5px 0; letter-spacing: -0.5px; }
+.kpi-tag  { display: inline-block; font-size: 11px; font-weight: 700; padding: 3.5px 10px; border-radius: 999px; }
+.kpi-ico  {
+    width: 54px;
+    height: 54px;
+    min-width: 54px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    line-height: 1;
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.05);
+}
 
+/* Mini Sub-KPI Cards inside Sections */
+.sub-kpi {
+    background: #FFFFFF;
+    border-radius: 14px;
+    padding: 14px 18px;
+    border: 1px solid #E6EAF2;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.03);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+}
+.sub-kpi-lbl { font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; }
+.sub-kpi-val { font-size: 21px; font-weight: 800; color: #0F172A; margin-top: 2px; }
+.sub-kpi-ico { width: 46px; height: 46px; border-radius: 13px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+
+/* Chart Cards */
 .card-box {
     background: #FFFFFF;
     border-radius: 18px;
@@ -115,6 +174,7 @@ section[data-testid="stSidebar"] {
 }
 .card-title { font-size: 15.5px; font-weight: 700; color: #0F172A; margin-bottom: 12px; }
 
+/* Progress Rows */
 .prod-row { margin-bottom: 13px; }
 .prod-meta { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; color: #1E293B; margin-bottom: 5px; }
 .prod-track { width: 100%; height: 9px; background: #F1F5F9; border-radius: 999px; overflow: hidden; }
@@ -123,7 +183,47 @@ section[data-testid="stSidebar"] {
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. DATA LOADING & PREPROCESSING
+# 2. SECURE LOGIN GATE (USER ID & PASSWORD)
+# ==============================================================================
+def _get_credentials():
+    try:
+        if "auth" in st.secrets:
+            return str(st.secrets["auth"].get("username", "arthlife")), str(st.secrets["auth"].get("password", "Arth@2026"))
+    except Exception:
+        pass
+    return "arthlife", "Arth@2026"
+
+VALID_USER, VALID_PASS = _get_credentials()
+
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+
+if not st.session_state["authenticated"]:
+    st.markdown("""
+    <div class="login-wrap">
+        <div class="login-badge">👗</div>
+        <div class="login-title">ARTH LIFE Kids Fashion</div>
+        <div class="login-sub">Executive Shopify Analytics Portal — Please Sign In</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    _, mid_col, _ = st.columns([1.15, 1, 1.15])
+    with mid_col:
+        with st.form("login_form", clear_on_submit=False):
+            in_user = st.text_input("👤 User ID", placeholder="Enter User ID")
+            in_pass = st.text_input("🔑 Password", type="password", placeholder="Enter Password")
+            submitted = st.form_submit_button("🔓 Sign In to Dashboard", use_container_width=True)
+            if submitted:
+                if in_user.strip() == VALID_USER and in_pass == VALID_PASS:
+                    st.session_state["authenticated"] = True
+                    st.rerun()
+                else:
+                    st.error("❌ Invalid User ID किंवा Password. कृपया पुन्हा प्रयत्न करा.")
+        st.caption("Tip: Streamlit Cloud `Secrets` मध्ये `[auth]` सेट करून तुम्ही तुमचा स्वतःचा ID व Password बदलू शकता.")
+    st.stop()
+
+# ==============================================================================
+# 3. DATA LOADING & PREPROCESSING
 # ==============================================================================
 DEFAULT_PATH = r"C:\Users\yasha\OneDrive\Desktop\New folder (4)\New folder (4)\New folder\PowerBI_Dimensional_Model_Ecommerce_2.2.xlsx"
 MODEL_FILENAME = "PowerBI_Dimensional_Model_Ecommerce_2.2.xlsx"
@@ -230,6 +330,9 @@ def _make_donut_fig(labels, values, colors, center_text):
 with st.sidebar:
     st.markdown("### 👗 ARTH LIFE Shopify")
     st.caption("Kids Fashion E-Commerce Analytics")
+    if st.button("🚪 Logout", use_container_width=True):
+        st.session_state["authenticated"] = False
+        st.rerun()
     st.divider()
 
     repo_excel = _find_repo_excel()
@@ -279,7 +382,7 @@ with st.sidebar:
     sel_regions = st.multiselect("🌍 Filter Region", all_regions, default=all_regions)
 
 # ==============================================================================
-# 3. TOP BANNER & UNIFIED DATE SELECTION BAR
+# 4. TOP BANNER & UNIFIED DATE SELECTION BAR
 # ==============================================================================
 ds_col1, ds_col2, ds_col3 = st.columns([1, 1, 2.2])
 with ds_col1:
@@ -302,14 +405,14 @@ st.markdown(f"""
 <div class="exec-banner">
     <div>
         <div class="exec-title">👗 ARTH LIFE Kids Fashion — Shopify Analysis</div>
-        <div class="exec-sub">Separate RTO & Exchange Sections, Day-Wise Trends, Region/State RTO & Financial KPIs</div>
+        <div class="exec-sub">Pure RTO & Cancelled Exchange Returns, Financial KPIs, Region/State RTO & Day-Wise Trends</div>
     </div>
     <div class="exec-pill">📅 Created: {start_date.strftime('%d %b %Y')} — {end_date.strftime('%d %b %Y')}</div>
 </div>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 4. FILTER STRICTLY BY ORDER CREATED DATE (SINGLE PASS)
+# 5. FILTER STRICTLY BY ORDER CREATED DATE (SINGLE PASS)
 # ==============================================================================
 if reg_col:
     p_orders = df_orders[
@@ -399,7 +502,7 @@ else:
     p_rev_cancelled = pd.DataFrame()
 
 # ==============================================================================
-# 5. KPI CALCULATIONS (DAX LOGIC + NO EXCHANGE COUNT IN TOTAL RETURNS)
+# 6. KPI CALCULATIONS (PURE RTO + CANCELLED EXCHANGES = TOTAL RETURNS)
 # ==============================================================================
 if not p_orders.empty and base_oid_col:
     p_orders_uniq = p_orders.drop_duplicates(subset=[base_oid_col]).copy()
@@ -411,6 +514,24 @@ else:
 gross_rev = float(p_orders_uniq["Order_Total"].sum()) if (len(p_orders_uniq) > 0 and "Order_Total" in p_orders_uniq.columns) else 0.0
 tot_disc = float(p_orders_uniq["Discount"].sum()) if ("Discount" in p_orders_uniq.columns and len(p_orders_uniq) > 0) else 0.0
 tot_ship = float(p_orders_uniq["Shipping"].sum()) if ("Shipping" in p_orders_uniq.columns and len(p_orders_uniq) > 0) else 0.0
+
+pure_rto_cnt = len(rto_all_oids)
+
+if not p_rev_cancelled.empty and rev_order_id_col:
+    canc_exch_cnt = int(p_rev_cancelled[rev_order_id_col].nunique())
+elif not p_rev_cancelled.empty and rev_base_col:
+    canc_exch_cnt = int(p_rev_cancelled[rev_base_col].nunique())
+else:
+    canc_exch_cnt = len(p_rev_cancelled)
+
+if not p_rev_active.empty and rev_order_id_col:
+    exch_cnt = int(p_rev_active[rev_order_id_col].nunique())
+else:
+    exch_cnt = len(p_rev_active)
+
+tot_ret_cnt = pure_rto_cnt + canc_exch_cnt
+disp_cnt = len(dispatched_ids)
+tot_ret_pct = (tot_ret_cnt / disp_cnt * 100) if disp_cnt > 0 else 0.0
 
 rto_order_ids_set = set(rto_all_oids)
 canc_exch_order_ids_set = set(p_rev_cancelled[rev_base_col].dropna()) if (not p_rev_cancelled.empty and rev_base_col) else set()
@@ -424,24 +545,13 @@ net_rev = max(gross_rev - tot_ret_amt - tot_ship, 0.0)
 realized_deliv_rev = float(p_orders_uniq[p_orders_uniq[base_oid_col].isin(del_oids)]["Order_Total"].sum()) if (len(p_orders_uniq) > 0 and base_oid_col) else 0.0
 
 aov = gross_rev / tot_ord if tot_ord > 0 else 0.0
-disp_cnt = len(dispatched_ids)
 deliv_cnt = len(del_oids)
 deliv_pct = (deliv_cnt / disp_cnt * 100) if disp_cnt > 0 else 0.0
-
-rto_cnt = len(rto_all_oids)
-rto_pct = (rto_cnt / disp_cnt * 100) if disp_cnt > 0 else 0.0
-
-if not p_rev_active.empty and rev_order_id_col:
-    exch_cnt = int(p_rev_active[rev_order_id_col].nunique())
-else:
-    exch_cnt = len(p_rev_active)
-
-tot_ret_cnt = rto_cnt
-tot_ret_pct = (tot_ret_cnt / disp_cnt * 100) if disp_cnt > 0 else 0.0
 
 rto_hub_parcels = int(p_disp["RTO_Pending_Hub"].sum()) if not p_disp.empty else 0
 rto_hub_orders = len(rto_pending_hub_oids)
 
+# Row 1: Financial KPIs
 k1, k2, k3, k4, k5 = st.columns(5)
 with k1:
     st.markdown(f"""
@@ -500,7 +610,8 @@ with k5:
 
 st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
 
-f1, f2, f3, f4 = st.columns(4)
+# Row 2: Operational & Return Breakdown KPIs
+f1, f2, f3, f4, f5 = st.columns(5)
 with f1:
     st.markdown(f"""
     <div class="kpi-card">
@@ -527,14 +638,25 @@ with f3:
     st.markdown(f"""
     <div class="kpi-card">
         <div>
-            <div class="kpi-lbl">Total Returns (RTO)</div>
+            <div class="kpi-lbl">Total Returns Display</div>
             <div class="kpi-val">{tot_ret_cnt:,} ({tot_ret_pct:.2f}%)</div>
-            <span class="kpi-tag" style="background:#FEF2F2; color:#DC2626;">Excludes Exchanges</span>
+            <span class="kpi-tag" style="background:#FEF2F2; color:#DC2626;">RTO {pure_rto_cnt:,} + Exch Canc {canc_exch_cnt:,}</span>
         </div>
         <div class="kpi-ico" style="background:#FEF2F2;">↩️</div>
     </div>""", unsafe_allow_html=True)
 
 with f4:
+    st.markdown(f"""
+    <div class="kpi-card">
+        <div>
+            <div class="kpi-lbl">Pure RTO / Exch Canc</div>
+            <div class="kpi-val">{pure_rto_cnt:,} / {canc_exch_cnt:,}</div>
+            <span class="kpi-tag" style="background:#FFF1F2; color:#BE123C;">Active Exch: {exch_cnt:,}</span>
+        </div>
+        <div class="kpi-ico" style="background:#FFF1F2;">🔄</div>
+    </div>""", unsafe_allow_html=True)
+
+with f5:
     st.markdown(f"""
     <div class="kpi-card">
         <div>
@@ -552,7 +674,7 @@ if p_orders.empty:
     st.stop()
 
 # ==============================================================================
-# 6. PRESENTATION TABS
+# 7. PRESENTATION TABS
 # ==============================================================================
 tab1, tab2, tab3, tab4 = st.tabs([
     "📈 Executive Overview & Funnel",
@@ -609,9 +731,9 @@ with tab1:
 
     with c_right:
         st.markdown('<div class="card-box"><div class="card-title">🎯 Order-to-Delivery Funnel (Unique Orders)</div>', unsafe_allow_html=True)
-        funnel_labels = ["Orders Created", "Dispatched", "True Delivered", "RTO Orders", "RTO Pending Hub", "In-Transit", "Not Dispatched"]
-        funnel_vals = [tot_ord, disp_cnt, deliv_cnt, rto_cnt, rto_hub_orders, len(int_oids), len(not_dispatched)]
-        funnel_colors = ["#4F46E5", "#0EA5E9", "#10B981", "#EF4444", "#EA580C", "#F59E0B", "#94A3B8"]
+        funnel_labels = ["Orders Created", "Dispatched", "True Delivered", "Pure RTO Orders", "Exch Cancelled", "RTO Pending Hub", "In-Transit", "Not Dispatched"]
+        funnel_vals = [tot_ord, disp_cnt, deliv_cnt, pure_rto_cnt, canc_exch_cnt, rto_hub_orders, len(int_oids), len(not_dispatched)]
+        funnel_colors = ["#4F46E5", "#0EA5E9", "#10B981", "#EF4444", "#E11D48", "#EA580C", "#F59E0B", "#94A3B8"]
 
         fig_fun = go.Figure(go.Bar(
             y=funnel_labels[::-1], x=funnel_vals[::-1], orientation="h",
@@ -629,17 +751,46 @@ with tab1:
         st.plotly_chart(fig_fun, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+# ------------------------------------------------------------------------------
+# TAB 2: SEPARATE RTO SECTION & SEPARATE EXCHANGE SECTION
+# ------------------------------------------------------------------------------
 with tab2:
-    s1, s2, s3, s4 = st.columns(4)
-    s1.metric("Total Returns Display", f"{tot_ret_cnt:,} ({tot_ret_pct:.2f}%)")
-    s2.metric("Total Return Amount", f"₹{tot_ret_amt:,.2f}")
-    s3.metric("Total RTO Orders", f"{rto_cnt:,}")
-    s4.metric("Total Exchange Orders", f"{exch_cnt:,}")
+    m1, m2, m3, m4, m5 = st.columns(5)
+    with m1:
+        st.markdown(f"""
+        <div class="sub-kpi">
+            <div><div class="sub-kpi-lbl">Total Returns Display</div><div class="sub-kpi-val">{tot_ret_cnt:,} ({tot_ret_pct:.2f}%)</div></div>
+            <div class="sub-kpi-ico" style="background:#FEF2F2;">↩️</div>
+        </div>""", unsafe_allow_html=True)
+    with m2:
+        st.markdown(f"""
+        <div class="sub-kpi">
+            <div><div class="sub-kpi-lbl">Total Return Amount</div><div class="sub-kpi-val">₹{tot_ret_amt:,.2f}</div></div>
+            <div class="sub-kpi-ico" style="background:#FFF1F2;">💸</div>
+        </div>""", unsafe_allow_html=True)
+    with m3:
+        st.markdown(f"""
+        <div class="sub-kpi">
+            <div><div class="sub-kpi-lbl">Pure RTO Orders</div><div class="sub-kpi-val">{pure_rto_cnt:,}</div></div>
+            <div class="sub-kpi-ico" style="background:#FFEDD5;">🚚</div>
+        </div>""", unsafe_allow_html=True)
+    with m4:
+        st.markdown(f"""
+        <div class="sub-kpi">
+            <div><div class="sub-kpi-lbl">Exchanged Cancelled</div><div class="sub-kpi-val">{canc_exch_cnt:,}</div></div>
+            <div class="sub-kpi-ico" style="background:#FCE7F3;">❌</div>
+        </div>""", unsafe_allow_html=True)
+    with m5:
+        st.markdown(f"""
+        <div class="sub-kpi">
+            <div><div class="sub-kpi-lbl">Active Exchange Orders</div><div class="sub-kpi-val">{exch_cnt:,}</div></div>
+            <div class="sub-kpi-ico" style="background:#F3E8FF;">🔄</div>
+        </div>""", unsafe_allow_html=True)
 
     # ================= SECTION 1: RTO ANALYSIS =================
-    st.markdown("""
+    st.markdown(f"""
     <div class="sec-header-rto">
-        <div class="sec-title">🚚 Section 1: RTO (Return-to-Origin) Analysis</div>
+        <div class="sec-title">🚚 Section 1: Pure RTO Analysis (Pure RTO: {pure_rto_cnt:,} | Cancelled Exchanges: {canc_exch_cnt:,} | Total Returns: {tot_ret_cnt:,})</div>
         <div class="sec-sub">RTO Status Donut, Region & State-wise RTO Returns & Day-Wise RTO Orders Trend</div>
     </div>
     """, unsafe_allow_html=True)
@@ -655,13 +806,13 @@ with tab2:
                 rto_st_agg = rto_df.groupby(rto_df[st_col_rto].fillna("RTO").astype(str).str.strip())[disp_base_col].nunique().reset_index(name="Count")
                 rto_st_agg.columns = ["Status", "Count"]
             else:
-                rto_st_agg = pd.DataFrame({"Status": ["RTO Pending Hub", "RTO Received Hub"], "Count": [rto_hub_orders, max(rto_cnt - rto_hub_orders, 0)]})
+                rto_st_agg = pd.DataFrame({"Status": ["RTO Pending Hub", "RTO Received Hub"], "Count": [rto_hub_orders, max(pure_rto_cnt - rto_hub_orders, 0)]})
             rto_st_agg = rto_st_agg[rto_st_agg["Count"] > 0]
             fig_rto_donut = _make_donut_fig(
                 rto_st_agg["Status"].tolist(),
                 rto_st_agg["Count"].tolist(),
                 ["#EF4444", "#F97316", "#F59E0B", "#0EA5E9", "#8B5CF6", "#10B981"],
-                f"<b>{rto_cnt:,}</b><br>RTO"
+                f"<b>{pure_rto_cnt:,}</b><br>Pure RTO"
             )
             st.plotly_chart(fig_rto_donut, use_container_width=True)
         else:
@@ -727,9 +878,9 @@ with tab2:
         st.markdown('</div>', unsafe_allow_html=True)
 
     # ================= SECTION 2: EXCHANGE ANALYSIS (Reverse_Status) =================
-    st.markdown("""
+    st.markdown(f"""
     <div class="sec-header-exch">
-        <div class="sec-title">🔄 Section 2: Exchange Analysis (<code>Fact_Reverse_Logistics</code> — <code>Reverse_Status</code>)</div>
+        <div class="sec-title">🔄 Section 2: Exchange Analysis (Active Exchanges: {exch_cnt:,} | Exchanged Cancelled: {canc_exch_cnt:,})</div>
         <div class="sec-sub">Exchanged Status by <code>Reverse_Status</code>, Day-Wise Exchange Orders & Reverse Logistics Table</div>
     </div>
     """, unsafe_allow_html=True)
@@ -753,7 +904,7 @@ with tab2:
                 ex_st_df["Reverse_Status"].tolist(),
                 ex_st_df["Count"].tolist(),
                 ["#10B981", "#8B5CF6", "#F59E0B", "#0EA5E9", "#EF4444", "#EC4899"],
-                f"<b>{int(ex_st_df['Count'].sum()):,}</b><br>Status"
+                f"<b>{int(ex_st_df['Count'].sum()):,}</b><br>Total Exch"
             )
             st.plotly_chart(fig_ex_donut, use_container_width=True)
         else:
@@ -791,7 +942,7 @@ with tab2:
             st.info("No day-wise exchange data in selected period.")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown(f"#### 🔄 Exchanges Detail (<code>Fact_Reverse_Logistics</code> — Active Exchange Orders: {exch_cnt:,})")
+    st.markdown(f"#### 🔄 Exchanges Detail (<code>Fact_Reverse_Logistics</code> — Active: {exch_cnt:,} | Cancelled: {canc_exch_cnt:,})")
     if not p_rev_all.empty:
         st.dataframe(p_rev_all, use_container_width=True, height=250, hide_index=True)
         st.download_button(
