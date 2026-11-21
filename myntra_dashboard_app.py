@@ -43,6 +43,7 @@ section[data-testid="stSidebar"] {
     border-right: 1px solid #E6EAF2;
 }
 
+/* Login Card */
 .login-wrap {
     max-width: 440px;
     margin: 56px auto 18px auto;
@@ -69,6 +70,7 @@ section[data-testid="stSidebar"] {
 .login-title { font-size: 22px; font-weight: 800; color: #0F172A; margin: 0; }
 .login-sub   { font-size: 13px; color: #64748B; margin-top: 5px; margin-bottom: 12px; }
 
+/* Executive Banner */
 .exec-banner {
     background: linear-gradient(135deg, #0F172A 0%, #831843 55%, #7C3AED 100%);
     border-radius: 22px;
@@ -93,6 +95,7 @@ section[data-testid="stSidebar"] {
     white-space: nowrap;
 }
 
+/* Section Headers */
 .sec-header-rto {
     background: linear-gradient(90deg, #FFF1F2 0%, #FFFFFF 100%);
     border-left: 5px solid #EF4444;
@@ -118,6 +121,7 @@ section[data-testid="stSidebar"] {
 .sec-title { font-size: 18px; font-weight: 800; color: #0F172A; margin: 0; }
 .sec-sub   { font-size: 12.5px; color: #64748B; margin-top: 2px; }
 
+/* KPI Cards */
 .kpi-card {
     background: #FFFFFF;
     border-radius: 18px;
@@ -165,7 +169,7 @@ section[data-testid="stSidebar"] {
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. LOGO LOADER
+# 2. LOGO LOADER (logo.jpeg FIRST + FALLBACKS)
 # ==============================================================================
 LOGO_CANDIDATES = [
     "logo.jpeg",
@@ -270,12 +274,14 @@ def _find_myntra_sources():
     ]
     found = []
     seen = set()
+
     for folder in search_dirs:
         if folder and os.path.isdir(folder):
             exact_xlsx = os.path.abspath(os.path.join(folder, CONSOLIDATED_XLSX_NAME))
             if os.path.isfile(exact_xlsx) and exact_xlsx not in seen:
                 seen.add(exact_xlsx)
                 found.append(exact_xlsx)
+
     for folder in search_dirs:
         if folder and os.path.isdir(folder):
             for pat in ["*myntra*.xlsx", "part-*.csv", "*myntra*.csv"]:
@@ -323,6 +329,25 @@ def _build_combined_status(s_val, r_val):
         return f"{s_clean or 'Unknown'} | {r_clean}"
     return s_clean or "Unknown"
 
+def _safe_dataframe(df: pd.DataFrame, **kwargs):
+    if df is None or df.empty:
+        st.dataframe(pd.DataFrame(), **kwargs)
+        return
+    clean_df = df.copy()
+    for col in clean_df.columns:
+        s = clean_df[col]
+        if pd.api.types.is_numeric_dtype(s):
+            num_s = pd.to_numeric(s, errors="coerce").replace([float("inf"), float("-inf")], 0.0).fillna(0.0)
+            if (num_s.abs() > 9e15).any():
+                clean_df[col] = num_s.apply(lambda v: f"{int(round(v))}" if float(v).is_integer() else f"{v:.2f}")
+            else:
+                clean_df[col] = num_s
+        elif pd.api.types.is_datetime64_any_dtype(s):
+            clean_df[col] = s.dt.strftime("%Y-%m-%d %H:%M:%S").fillna("")
+        else:
+            clean_df[col] = s.apply(lambda v: "" if v is None or (isinstance(v, float) and pd.isna(v)) else str(v))
+    st.dataframe(clean_df, **kwargs)
+
 @st.cache_data(show_spinner=False)
 def load_myntra_data(file_paths, uploaded_files):
     frames = []
@@ -354,12 +379,12 @@ def load_myntra_data(file_paths, uploaded_files):
     df = pd.concat(frames, ignore_index=True).drop_duplicates().copy()
 
     df["order_date_dt"] = pd.to_datetime(df.get("order_date", pd.Series(dtype=str)), format="mixed", errors="coerce")
-    if df["order_date_dt"].dt.tz is not None:
+    if hasattr(df["order_date_dt"].dt, "tz") and df["order_date_dt"].dt.tz is not None:
         df["order_date_dt"] = df["order_date_dt"].dt.tz_convert("Asia/Kolkata").dt.tz_localize(None)
     df["Order_Create_Date"] = df["order_date_dt"].dt.date
 
     df["packing_date_dt"] = pd.to_datetime(df.get("packing_date", pd.Series(dtype=str)), format="mixed", errors="coerce")
-    if df["packing_date_dt"].dt.tz is not None:
+    if hasattr(df["packing_date_dt"].dt, "tz") and df["packing_date_dt"].dt.tz is not None:
         df["packing_date_dt"] = df["packing_date_dt"].dt.tz_convert("Asia/Kolkata").dt.tz_localize(None)
 
     for c in ["seller_paid_amount", "Total_Customer_Paid", "mrp", "discount_amount", "delivery_charges"]:
@@ -499,7 +524,7 @@ if p_df.empty:
 tot_ord = int(p_df["Unique_Order_Key"].nunique())
 tot_rows = len(p_df)
 
-has_pack = p_df["packing_date_dt"].notna() if "packing_date_dt" in p_df.columns else pd.Series([False]*len(p_df))
+has_pack = p_df["packing_date_dt"].notna()
 has_inv = (p_df["invoice_number"].fillna("").astype(str).str.strip() != "") if "invoice_number" in p_df.columns else pd.Series([False]*len(p_df))
 is_disp_mask = has_pack | has_inv | p_df["Status_Clean"].isin(["delivered", "in_transit", "reverse_in_transit", "shipped"])
 disp_cnt = int(p_df[is_disp_mask]["Unique_Order_Key"].nunique()) if is_disp_mask.any() else 0
@@ -675,7 +700,7 @@ with tab1:
             xaxis=dict(showgrid=True, gridcolor="#F1F5F9", range=[0, max(float(comb_tbl["Unique_Orders"].max()) * 1.25, 3.0)])
         )
         st.plotly_chart(fig_comb, use_container_width=True)
-        st.dataframe(comb_tbl, use_container_width=True, height=200, hide_index=True)
+        _safe_dataframe(comb_tbl, use_container_width=True, height=200, hide_index=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     with c_right:
@@ -786,5 +811,5 @@ with tab3:
 with tab4:
     st.markdown(f"#### 📋 Filtered Myntra Orders ({tot_ord:,} Unique Orders / {tot_rows:,} Rows)")
     tbl_cols = [c for c in ["order_number", "sale_order_code", "Order_Create_Date", "order_date", "order_item_status", "return_type", "Combined_Status", "return_status", "product_sku_code", "article_type", "customer_state", "seller_paid_amount", "discount_amount", "delivery_charges"] if c in p_df.columns]
-    st.dataframe(p_df[tbl_cols], use_container_width=True, height=360, hide_index=True)
+    _safe_dataframe(p_df[tbl_cols], use_container_width=True, height=360, hide_index=True)
     st.download_button("⬇️ Download Filtered Myntra Data CSV", p_df[tbl_cols].to_csv(index=False).encode("utf-8"), f"myntra_analysis_{start_date}_{end_date}.csv", "text/csv")
