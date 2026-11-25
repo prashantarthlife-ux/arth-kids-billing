@@ -201,9 +201,14 @@ section[data-testid="stSidebar"] {
     background: #FFFFFF;
     border: 1px solid #E2E8F0;
     border-top: 4px solid var(--accent, #4F46E5);
-    border-radius: 14px 14px 4px 4px;
-    padding: 14px 16px 10px 16px;
+    border-bottom: none;
+    border-radius: 14px 14px 0 0;
+    padding: 14px 16px 8px 16px;
     box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
+}
+div[data-testid="stPlotlyChart"] > div {
+    border-radius: 0 0 14px 14px;
+    overflow: hidden;
 }
 .kpi-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .kpi-lbl { font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.4px; }
@@ -1386,7 +1391,7 @@ with top_nav2:
 
 
 # ==============================================================================
-# 6. PAGE 1: DAILY ANALYSIS
+# 6. PAGE 1: DAILY ANALYSIS (WITH CONTAINED SPARKLINES)
 # ==============================================================================
 def render_daily_page():
     if model_src is None:
@@ -1595,28 +1600,44 @@ def render_daily_page():
         )
     df_7d = pd.DataFrame(rows_7d)
 
-    def _spark(x_labels, y_vals, line_color="#4F46E5"):
+    def _spark(x_labels, y_vals, line_color="#4F46E5", fill_rgba="rgba(79, 70, 229, 0.08)"):
+        y_arr = np.asarray(y_vals, dtype=float)
+        y_min = float(np.min(y_arr)) if len(y_arr) else 0.0
+        y_max = float(np.max(y_arr)) if len(y_arr) else 1.0
+        span = max(y_max - y_min, 1.0)
+        pad_low = max(0.0, y_min - span * 0.25)
+        pad_high = y_max + span * 0.30
+
         fig = go.Figure(
             go.Scatter(
-                x=x_labels,
-                y=y_vals,
+                x=list(range(len(x_labels))),
+                y=y_arr,
                 mode="lines+markers",
                 fill="tozeroy",
-                fillcolor="rgba(79, 70, 229, 0.08)" if line_color == "#4F46E5" else "rgba(15, 23, 42, 0.06)",
-                line=dict(color=line_color, width=2.4, shape="spline"),
-                marker=dict(size=5.5, color="#FFFFFF", line=dict(color=line_color, width=2)),
-                text=[str(v) for v in y_vals],
-                hovertemplate="%{x}: <b>%{text}</b><extra></extra>",
+                fillcolor=fill_rgba,
+                line=dict(color=line_color, width=2.2, shape="spline"),
+                marker=dict(size=5, color="#FFFFFF", line=dict(color=line_color, width=1.8)),
+                customdata=list(x_labels),
+                text=[f"{int(v):,}" for v in y_arr],
+                hovertemplate="%{customdata}: <b>%{text}</b><extra></extra>",
             )
         )
         fig.update_layout(
-            height=44,
-            margin=dict(l=4, r=4, t=4, b=2),
+            height=46,
+            margin=dict(l=10, r=10, t=6, b=6),
             paper_bgcolor="#FFFFFF",
             plot_bgcolor="#FFFFFF",
             showlegend=False,
-            xaxis=dict(visible=False),
-            yaxis=dict(visible=False),
+            xaxis=dict(
+                visible=False,
+                range=[-0.4, max(len(x_labels) - 0.6, 0.6)],
+                fixedrange=True,
+            ),
+            yaxis=dict(
+                visible=False,
+                range=[pad_low, pad_high],
+                fixedrange=True,
+            ),
         )
         return fig
 
@@ -1639,7 +1660,10 @@ def render_daily_page():
             <div class="kpi-foot">Prepaid: <b>{pre_day_cnt:,}</b> | COD: <b>{cod_day_cnt:,}</b> · Rev: <b>₹{day_rev_amt:,.0f}</b></div>
         </div>
         """)
-        st.plotly_chart(_spark(df_7d["Date"], df_7d["Orders"], "#4F46E5"), use_container_width=True)
+        st.plotly_chart(
+            _spark(df_7d["Date"], df_7d["Orders"], "#4F46E5", "rgba(79, 70, 229, 0.08)"),
+            use_container_width=True,
+        )
 
     with c_k2:
         _html(f"""
@@ -1649,7 +1673,10 @@ def render_daily_page():
             <div class="kpi-foot">Year_Month: <b>{latest_ym_val}</b> • Status: Unfulfilled</div>
         </div>
         """)
-        st.plotly_chart(_spark(df_7d["Date"], df_7d["Unfulfilled"], "#E11D48"), use_container_width=True)
+        st.plotly_chart(
+            _spark(df_7d["Date"], df_7d["Unfulfilled"], "#E11D48", "rgba(225, 29, 72, 0.08)"),
+            use_container_width=True,
+        )
 
     with c_k3:
         val_ful_disp = f"{ful_day_cnt:,}" if ful_day_cnt > 0 else "—"
@@ -1660,7 +1687,10 @@ def render_daily_page():
             <div class="kpi-foot">Fulfilled on {selected_date.strftime('%d %b')}</div>
         </div>
         """)
-        st.plotly_chart(_spark(df_7d["Date"], df_7d["Fulfilled"], "#7C3AED"), use_container_width=True)
+        st.plotly_chart(
+            _spark(df_7d["Date"], df_7d["Fulfilled"], "#7C3AED", "rgba(124, 58, 237, 0.08)"),
+            use_container_width=True,
+        )
 
     with c_k4:
         _html(f"""
@@ -1670,7 +1700,10 @@ def render_daily_page():
             <div class="kpi-foot">Prev Day ({prev_date.strftime('%d %b')}): <b>{unful_prev_cnt:,}</b> Unfulfilled</div>
         </div>
         """)
-        st.plotly_chart(_spark(df_7d["Date"], df_7d["Unfulfilled"], "#F59E0B"), use_container_width=True)
+        st.plotly_chart(
+            _spark(df_7d["Date"], df_7d["Unfulfilled"], "#F59E0B", "rgba(245, 158, 11, 0.08)"),
+            use_container_width=True,
+        )
 
     tot_7d_ord = int(df_7d["Orders"].sum())
     tot_7d_pre = int(df_7d["Prepaid"].sum())
@@ -1771,7 +1804,10 @@ def render_daily_page():
             <div class="kpi-foot">Prev Day ({prev_date.strftime('%d %b')}): <b>{disp_prev_cnt:,}</b> Dispatched</div>
         </div>
         """)
-        st.plotly_chart(_spark(df_7d["Date"], df_7d["Dispatched"], "#10B981"), use_container_width=True)
+        st.plotly_chart(
+            _spark(df_7d["Date"], df_7d["Dispatched"], "#10B981", "rgba(16, 185, 129, 0.08)"),
+            use_container_width=True,
+        )
 
         _html('<div class="viz-card"><div class="viz-heading">Dispatched Orders (7 Days)</div>')
         fig_dp = go.Figure(
@@ -2757,7 +2793,6 @@ def render_shopify_page():
         else:
             st.info("No Exchange records found for the selected created orders window.")
 
-        # Placed at the bottom of tab2 as requested
         if not p_disp.empty and disp_base_col:
             prod_col_ctrl = _find_col(p_disp, ["Clean_Product_Name", "Product_Name", "Title", "SKU"])
             age_col_ctrl = _find_col(p_disp, ["Product_Age_Group", "Age_Group", "Size"])
@@ -2999,7 +3034,7 @@ def render_shopify_forecast_page():
 
     avail_months_fc = sorted(orders_clean["_dt"].dt.to_period("M").astype(str).unique().tolist(), reverse=True)
     latest_m_fc = avail_months_fc[0]
-    m_start_fc, _ = _month_bounds(latest_m_fc, min_d_bound := min_dt, latest_end_fc)
+    m_start_fc, _ = _month_bounds(latest_m_fc, min_dt, latest_end_fc)
 
     if "_shp_fc_boot_seen" not in st.session_state:
         st.session_state["_shp_fc_boot_seen"] = True
