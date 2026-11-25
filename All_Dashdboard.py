@@ -2949,7 +2949,7 @@ def render_shopify_page():
 
 
 # ==============================================================================
-# 7B. PAGE 2B: SHOPIFY FORECAST & COHORT (COHORT AT VERY BOTTOM)
+# 7B. PAGE 2B: SHOPIFY FORECAST & COHORT (NON-ZERO FORECAST + COHORT AT BOTTOM)
 # ==============================================================================
 def render_shopify_forecast_page():
     """Render Shopify July-to-latest-month comparison, forecast & Customer Cohort Analysis at bottom."""
@@ -2999,7 +2999,7 @@ def render_shopify_forecast_page():
 
     avail_months_fc = sorted(orders_clean["_dt"].dt.to_period("M").astype(str).unique().tolist(), reverse=True)
     latest_m_fc = avail_months_fc[0]
-    m_start_fc, _ = _month_bounds(latest_m_fc, min_dt, latest_end_fc)
+    m_start_fc, _ = _month_bounds(latest_m_fc, min_d_bound := min_dt, latest_end_fc)
 
     if "_shp_fc_boot_seen" not in st.session_state:
         st.session_state["_shp_fc_boot_seen"] = True
@@ -3152,44 +3152,56 @@ def render_shopify_forecast_page():
     daily_cur["Revenue"] = daily_cur["Revenue"].astype(float)
 
     fit_window = daily_cur.tail(min(60, len(daily_cur))).copy()
-    x_idx = np.arange(len(fit_window), dtype=float)
     dow_arr = fit_window.index.dayofweek
     z_score = 1.2816 if conf_level == 0.80 else 1.6449
 
     def _forecast_with_band(y_series: np.ndarray, days_ahead: int):
+        """Forecast using recent 7-day rolling baseline, damped 14-day slope, and day-of-week seasonality."""
         fut_dates = pd.date_range(
             start=range_end + datetime.timedelta(days=1), periods=days_ahead, freq="D"
         )
-        if len(y_series) >= 2 and np.std(y_series) > 0:
-            slope, intercept = np.polyfit(x_idx, y_series, 1)
-            fitted = np.maximum(0.0, intercept + slope * x_idx)
-            residuals = y_series - fitted
-            sigma = float(np.std(residuals, ddof=1)) if len(residuals) > 1 else float(np.std(residuals))
+        clean_y = y_series.copy()
+        if len(clean_y) > 7 and clean_y[-1] == 0:
+            clean_y = clean_y[:-1]
 
-            ratios = np.where(fitted > 1e-6, y_series / np.maximum(fitted, 1e-6), 1.0)
+        if len(clean_y) >= 3 and np.std(clean_y) > 0:
+            recent_7 = clean_y[-min(7, len(clean_y)) :]
+            recent_14 = clean_y[-min(14, len(clean_y)) :]
+            baseline_level = float(np.mean(recent_7))
+
+            x_rec = np.arange(len(recent_14), dtype=float)
+            raw_slope, _ = np.polyfit(x_rec, recent_14, 1)
+            max_daily_step = baseline_level * 0.025
+            damped_slope = float(np.clip(raw_slope * 0.45, -max_daily_step, max_daily_step))
+
+            dow_use = dow_arr[-len(clean_y) :]
+            overall_mean = max(float(np.mean(clean_y)), 1e-6)
             dow_factors = {}
             for dow_i in range(7):
-                vals_d = ratios[dow_arr == dow_i]
-                raw_f = float(np.mean(vals_d)) if len(vals_d) > 0 else 1.0
-                dow_factors[dow_i] = float(np.clip(raw_f, 0.5, 1.8))
+                vals_d = clean_y[dow_use == dow_i]
+                raw_f = float(np.mean(vals_d)) / overall_mean if len(vals_d) > 0 else 1.0
+                dow_factors[dow_i] = float(np.clip(raw_f, 0.75, 1.35))
             avg_f = np.mean(list(dow_factors.values())) or 1.0
             dow_factors = {k: v / avg_f for k, v in dow_factors.items()}
 
-            fut_x = np.arange(len(x_idx), len(x_idx) + days_ahead, dtype=float)
-            base_pred = intercept + slope * fut_x
-            preds = np.array(
-                [max(0.0, float(bp) * dow_factors[int(dt.dayofweek)]) for bp, dt in zip(base_pred, fut_dates)],
-                dtype=float,
-            )
-            step_scale = np.sqrt(1.0 + np.arange(1, days_ahead + 1, dtype=float) / max(len(y_series), 1))
-            margin = z_score * sigma * step_scale
-            lower = np.maximum(0.0, preds - margin)
-            upper = preds + margin
-            return fut_dates, preds, lower, upper, float(slope)
+            preds = []
+            for step_i, dt in enumerate(fut_dates, start=1):
+                effective_steps = sum(0.92 ** k for k in range(step_i))
+                level_t = max(baseline_level * 0.55, baseline_level + damped_slope * effective_steps)
+                preds.append(level_t * dow_factors[int(dt.dayofweek)])
+            preds = np.array(preds, dtype=float)
 
-        avg_val = max(0.0, float(np.mean(y_series))) if len(y_series) > 0 else 0.0
+            sigma = float(np.std(recent_14, ddof=1)) if len(recent_14) > 1 else baseline_level * 0.15
+            sigma = min(sigma, baseline_level * 0.35)
+            step_scale = np.sqrt(1.0 + np.arange(1, days_ahead + 1, dtype=float) / max(len(recent_14), 1))
+            margin = z_score * sigma * step_scale
+            lower = np.maximum(preds * 0.35, preds - margin)
+            upper = preds + margin
+            return fut_dates, preds, lower, upper, damped_slope
+
+        avg_val = max(0.0, float(np.mean(clean_y))) if len(clean_y) > 0 else 0.0
         preds = np.full(days_ahead, avg_val, dtype=float)
-        return fut_dates, preds, preds * 0.8, preds * 1.2, 0.0
+        return fut_dates, preds, preds * 0.75, preds * 1.25, 0.0
 
     fut_dates, fc_orders, ord_low, ord_high, ord_slope = _forecast_with_band(
         fit_window["Orders"].to_numpy(dtype=float), horizon_days
@@ -3262,7 +3274,7 @@ def render_shopify_forecast_page():
         <div style="font-size:13px; color:#1E293B; line-height:1.65;">
 - <b>Period Comparison ({range_start.strftime('%d %b')}–{range_end.strftime('%d %b')} vs {prev_start.strftime('%d %b')}–{prev_end.strftime('%d %b')}):</b>
               Revenue changed by <b>{rev_chg_pct:+.1f}%</b> and orders changed by <b>{ord_chg_pct:+.1f}%</b>, while AOV shifted from <b>₹{prev_aov:,.0f}</b> to <b>₹{cur_aov:,.0f}</b>.<br>
-- <b>Trend & Peak Window:</b> Recent daily revenue trajectory is <b>{trend_dir}</b> (<b>₹{rev_slope:+,.0f}/day</b> slope). Highest projected day in the forecast window is <b>{best_fc_day}</b> at <b>₹{best_fc_val:,.0f}</b>.<br>
+- <b>Trend & Peak Window:</b> Recent 14-day revenue trajectory is <b>{trend_dir}</b> (<b>₹{rev_slope:+,.0f}/day</b> damped slope). Highest projected day in the forecast window is <b>{best_fc_day}</b> at <b>₹{best_fc_val:,.0f}</b>.<br>
 - <b>COD & Return Watchout:</b> Current COD share is <b>{cur_cod_share:.1f}%</b> (Prev: <b>{prev_cod_share:.1f}%</b>) and historical RTO rate is <b>{cur_rto_rate:.1f}%</b> (Prev RTO orders: <b>{prev_rto_cnt:,}</b>), implying ~<b>{expected_rto_in_fc:.0f}</b> potential RTO orders across the next {horizon_days} days.
         </div>
     </div>
@@ -3460,9 +3472,10 @@ def render_shopify_forecast_page():
 
 
 # ==============================================================================
-# 8. PAGE 3: MYNTRA ANALYSIS (RTO & RETURN CONTROL AT BOTTOM OF TAB 2)
+# 8. PAGE 3: MYNTRA ANALYSIS (CLAMPED TO AVAILABLE DATA DATES + RTO CONTROL)
 # ==============================================================================
 def render_myntra_page():
+    """Render Myntra analytics clamped strictly to available data dates."""
     df_all, _ = load_myntra_data(myntra_src)
     if df_all.empty:
         st.warning(f"File `{MYNTRA_CONSOLIDATED_NAME}` was not found in GitHub or upload panel.")
@@ -3470,7 +3483,7 @@ def render_myntra_page():
 
     valid_dates = df_all["order_date_dt"].dropna()
     if valid_dates.empty:
-        st.error("No valid dates found in order_date.")
+        st.error("No valid dates found in Myntra `order_date`.")
         return
 
     min_d = valid_dates.min().date()
@@ -3478,11 +3491,11 @@ def render_myntra_page():
 
     avail_months_myn = sorted(valid_dates.dt.to_period("M").astype(str).unique().tolist(), reverse=True)
     latest_m_myn = avail_months_myn[0]
-    def_end_myn = _resolve_default_latest_date(min_d, max_d)
+    def_end_myn = max_d
     def_start_myn, _ = _month_bounds(latest_m_myn, min_d, def_end_myn)
     _sync_refresh_dates("myntra", min_d, max_d, def_start_myn, def_end_myn)
 
-    f1, f2, f3, f4, f5 = st.columns([1.1, 1.0, 0.95, 0.95, 1.35])
+    f1, f2, f3, f4, f5 = st.columns([1.15, 1.05, 0.95, 0.95, 1.35])
     with f1:
         sel_m_myn = st.selectbox(
             "🗓️ Month-wise Filter",
@@ -3493,21 +3506,31 @@ def render_myntra_page():
     with f2:
         preset = st.selectbox(
             "📅 Quick Preset",
-            ["Month / Latest", "01 Oct – 05 Nov 2026", "01 Jul – 30 Nov 2026", "All Available Dates"],
+            [
+                "Month / Latest",
+                f"01 Oct – {max_d.strftime('%d %b %Y')}",
+                f"01 Jul – {max_d.strftime('%d %b %Y')}",
+                "All Available Dates",
+            ],
             index=0,
             key="myn_preset",
         )
-    if preset == "01 Oct – 05 Nov 2026":
-        p_s = min(max(datetime.date(2026, 10, 1), min_d), max_d)
-        p_e = max(min(datetime.date(2026, 11, 5), max_d), min_d)
-    elif preset == "01 Jul – 30 Nov 2026":
-        p_s = min(max(datetime.date(2026, 7, 1), min_d), max_d)
-        p_e = max(min(datetime.date(2026, 11, 30), max_d), min_d)
+
+    oct_start = min(max(datetime.date(max_d.year, 10, 1), min_d), max_d)
+    jul_start = min(max(datetime.date(max_d.year, 7, 1), min_d), max_d)
+
+    if preset == f"01 Oct – {max_d.strftime('%d %b %Y')}":
+        p_s, p_e = oct_start, max_d
+    elif preset == f"01 Jul – {max_d.strftime('%d %b %Y')}":
+        p_s, p_e = jul_start, max_d
     elif preset == "All Available Dates" or sel_m_myn == "All Available Dates":
         p_s, p_e = min_d, max_d
     else:
         chosen_m = latest_m_myn if sel_m_myn.startswith("Latest Month") else sel_m_myn
         p_s, p_e = _month_bounds(chosen_m, min_d, max_d)
+
+    p_s = min(max(p_s, min_d), max_d)
+    p_e = min(max(p_e, min_d), max_d)
 
     if st.session_state.get("_myn_last_choice") != (sel_m_myn, preset):
         st.session_state["_myn_last_choice"] = (sel_m_myn, preset)
@@ -3525,6 +3548,9 @@ def render_myntra_page():
             "🔀 Combined Status", all_comb_statuses, default=all_comb_statuses, key="myn_comb"
         )
 
+    start_date = min(max(start_date, min_d), max_d)
+    end_date = min(max(end_date, min_d), max_d)
+
     if not sel_comb_statuses:
         sel_comb_statuses = all_comb_statuses
 
@@ -3538,7 +3564,7 @@ def render_myntra_page():
             {LOGO_BANNER_HTML}
             <div>
                 <div class="exec-title">ARTH LIFE Kids Fashion — Myntra Analysis</div>
-                <div class="exec-sub">Connected to Myntra_Consolidated_Orders.xlsx • Orders, RTO/Exchange, SKU Control & Net Revenue</div>
+                <div class="exec-sub">Connected to Myntra_Consolidated_Orders.xlsx • Data Available: {min_d.strftime('%d %b %Y')} to {max_d.strftime('%d %b %Y')}</div>
             </div>
         </div>
         <div class="exec-pill">📅 Created: {start_date.strftime('%d %b %Y')} — {end_date.strftime('%d %b %Y')}</div>
@@ -3552,7 +3578,10 @@ def render_myntra_page():
     ].copy()
 
     if p_df.empty:
-        st.info(f"No Myntra orders found between {start_date.strftime('%d %b %Y')} and {end_date.strftime('%d %b %Y')}.")
+        st.info(
+            f"No Myntra orders found between {start_date.strftime('%d %b %Y')} and {end_date.strftime('%d %b %Y')}. "
+            f"Myntra data is available from {min_d.strftime('%d %b %Y')} to {max_d.strftime('%d %b %Y')}."
+        )
         return
 
     tot_ord = int(p_df["Unique_Order_Key"].nunique())
@@ -4462,10 +4491,3 @@ elif page_now == "🛍️ Myntra Analysis":
     render_myntra_page()
 elif page_now == "💄 Nykaa Analysis":
     render_nykaa_page()
-    
-    
-    
-    
-    
-    
-    
