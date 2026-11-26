@@ -948,24 +948,38 @@ def _build_combined_status(s_val, r_val):
 
 @st.cache_data(show_spinner=False)
 def load_myntra_data(source):
-    """Load and normalize Myntra order data."""
+    """Load and normalize Myntra order data using exact order_date_dt / order_date."""
     if source is None:
         return pd.DataFrame(), []
     tmp, nm = _read_single_myntra(source)
     df = tmp.drop_duplicates().copy()
 
+    ord_dt_existing = _find_col(df, ["order_date_dt"])
     ord_dt_col = _find_col(df, ["order_date", "Order Date", "order_created_date"])
     pack_dt_col = _find_col(df, ["packing_date", "Packing Date", "packed_date"])
 
-    df["order_date_dt"] = pd.to_datetime(
-        df[ord_dt_col] if ord_dt_col else pd.Series(dtype=str), format="mixed", dayfirst=True, errors="coerce"
+    parsed_from_raw = (
+        pd.to_datetime(df[ord_dt_col], format="mixed", errors="coerce")
+        if ord_dt_col
+        else pd.Series(pd.NaT, index=df.index)
     )
-    if hasattr(df["order_date_dt"].dt, "tz") and df["order_date_dt"].dt.tz is not None:
-        df["order_date_dt"] = df["order_date_dt"].dt.tz_convert("Asia/Kolkata").dt.tz_localize(None)
+    if hasattr(parsed_from_raw.dt, "tz") and parsed_from_raw.dt.tz is not None:
+        parsed_from_raw = parsed_from_raw.dt.tz_convert("Asia/Kolkata").dt.tz_localize(None)
+
+    if ord_dt_existing:
+        parsed_existing = pd.to_datetime(df[ord_dt_existing], format="mixed", errors="coerce")
+        if hasattr(parsed_existing.dt, "tz") and parsed_existing.dt.tz is not None:
+            parsed_existing = parsed_existing.dt.tz_convert("Asia/Kolkata").dt.tz_localize(None)
+        df["order_date_dt"] = parsed_existing.fillna(parsed_from_raw)
+    else:
+        df["order_date_dt"] = parsed_from_raw
+
     df["Order_Create_Date"] = df["order_date_dt"].dt.date
 
-    df["packing_date_dt"] = pd.to_datetime(
-        df[pack_dt_col] if pack_dt_col else pd.Series(dtype=str), format="mixed", dayfirst=True, errors="coerce"
+    df["packing_date_dt"] = (
+        pd.to_datetime(df[pack_dt_col], format="mixed", errors="coerce")
+        if pack_dt_col
+        else pd.Series(pd.NaT, index=df.index)
     )
     if hasattr(df["packing_date_dt"].dt, "tz") and df["packing_date_dt"].dt.tz is not None:
         df["packing_date_dt"] = df["packing_date_dt"].dt.tz_convert("Asia/Kolkata").dt.tz_localize(None)
@@ -3081,9 +3095,9 @@ def render_shopify_forecast_page():
         st.rerun()
 
     with c_f2:
-        range_start = st.date_input("📅 Start Date", min_value=min_dt, max_value=max_dt, key="shp_fc_start")
+        range_start = st.date_input("📅 Start Date", min_value=min_d, max_value=max_d, key="shp_fc_start")
     with c_f3:
-        range_end = st.date_input("📅 End Date", min_value=min_dt, max_value=max_dt, key="shp_fc_end")
+        range_end = st.date_input("📅 End Date", min_value=min_d, max_value=max_d, key="shp_fc_end")
     with c_f4:
         horizon_days = st.selectbox(
             "🔮 Forecast Horizon",
@@ -3514,10 +3528,10 @@ def render_shopify_forecast_page():
 
 
 # ==============================================================================
-# 8. PAGE 3: MYNTRA ANALYSIS (BANNER ON TOP + CLAMPED DATES + RTO CONTROL)
+# 8. PAGE 3: MYNTRA ANALYSIS (BANNER ON TOP + ACCURATE ORDER DATES + RTO CONTROL)
 # ==============================================================================
 def render_myntra_page():
-    """Render Myntra analytics clamped strictly to available data dates."""
+    """Render Myntra analytics with accurate order_date bounds and filter synchronization."""
     df_all, _ = load_myntra_data(myntra_src)
     if df_all.empty:
         st.warning(f"File `{MYNTRA_CONSOLIDATED_NAME}` was not found in GitHub or upload panel.")
@@ -3525,7 +3539,7 @@ def render_myntra_page():
 
     valid_dates = df_all["order_date_dt"].dropna()
     if valid_dates.empty:
-        st.error("No valid dates found in Myntra `order_date`.")
+        st.error("No valid dates found in Myntra `order_date` / `order_date_dt`.")
         return
 
     min_d = valid_dates.min().date()
@@ -3533,12 +3547,11 @@ def render_myntra_page():
 
     avail_months_myn = sorted(valid_dates.dt.to_period("M").astype(str).unique().tolist(), reverse=True)
     latest_m_myn = avail_months_myn[0]
-    def_end_myn = max_d
-    def_start_myn, _ = _month_bounds(latest_m_myn, min_d, def_end_myn)
+    def_start_myn, def_end_myn = _month_bounds(latest_m_myn, min_d, max_d)
     _sync_refresh_dates("myntra", min_d, max_d, def_start_myn, def_end_myn)
 
-    disp_m_start = st.session_state.get("myntra_start_date", def_start_myn)
-    disp_m_end = st.session_state.get("myntra_end_date", def_end_myn)
+    disp_m_start = min(max(st.session_state.get("myntra_start_date", def_start_myn), min_d), max_d)
+    disp_m_end = min(max(st.session_state.get("myntra_end_date", def_end_myn), min_d), max_d)
 
     _html(f"""
     <div class="exec-banner myntra">
@@ -3546,12 +3559,15 @@ def render_myntra_page():
             {LOGO_BANNER_HTML}
             <div>
                 <div class="exec-title">ARTH LIFE Kids Fashion — Myntra Analysis</div>
-                <div class="exec-sub">Connected to Myntra_Consolidated_Orders.xlsx • Data Available: {min_d.strftime('%d %b %Y')} to {max_d.strftime('%d %b %Y')}</div>
+                <div class="exec-sub">Connected to Myntra_Consolidated_Orders.xlsx • Order Dates: {min_d.strftime('%d %b %Y')} to {max_d.strftime('%d %b %Y')}</div>
             </div>
         </div>
-        <div class="exec-pill">📅 Created: {disp_m_start.strftime('%d %b %Y')} — {disp_m_end.strftime('%d %b %Y')}</div>
+        <div class="exec-pill">📅 Order Date: {disp_m_start.strftime('%d %b %Y')} — {disp_m_end.strftime('%d %b %Y')}</div>
     </div>
     """)
+
+    oct_lbl = f"01 Oct – {min(datetime.date(max_d.year, 10, 31), max_d).strftime('%d %b %Y')}"
+    jul_lbl = f"01 Jul – {max_d.strftime('%d %b %Y')}"
 
     f1, f2, f3, f4, f5 = st.columns([1.15, 1.05, 0.95, 0.95, 1.35])
     with f1:
@@ -3564,23 +3580,17 @@ def render_myntra_page():
     with f2:
         preset = st.selectbox(
             "📅 Quick Preset",
-            [
-                "Month / Latest",
-                f"01 Oct – {max_d.strftime('%d %b %Y')}",
-                f"01 Jul – {max_d.strftime('%d %b %Y')}",
-                "All Available Dates",
-            ],
+            ["Month / Latest", oct_lbl, jul_lbl, "All Available Dates"],
             index=0,
             key="myn_preset",
         )
 
-    oct_start = min(max(datetime.date(max_d.year, 10, 1), min_d), max_d)
-    jul_start = min(max(datetime.date(max_d.year, 7, 1), min_d), max_d)
-
-    if preset == f"01 Oct – {max_d.strftime('%d %b %Y')}":
-        p_s, p_e = oct_start, max_d
-    elif preset == f"01 Jul – {max_d.strftime('%d %b %Y')}":
-        p_s, p_e = jul_start, max_d
+    if preset == oct_lbl:
+        p_s = min(max(datetime.date(max_d.year, 10, 1), min_d), max_d)
+        p_e = min(max(datetime.date(max_d.year, 10, 31), min_d), max_d)
+    elif preset == jul_lbl:
+        p_s = min(max(datetime.date(max_d.year, 7, 1), min_d), max_d)
+        p_e = max_d
     elif preset == "All Available Dates" or sel_m_myn == "All Available Dates":
         p_s, p_e = min_d, max_d
     else:
@@ -3626,7 +3636,7 @@ def render_myntra_page():
     if p_df.empty:
         st.info(
             f"No Myntra orders found between {start_date.strftime('%d %b %Y')} and {end_date.strftime('%d %b %Y')}. "
-            f"Myntra data is available from {min_d.strftime('%d %b %Y')} to {max_d.strftime('%d %b %Y')}."
+            f"Available Myntra order dates are {min_d.strftime('%d %b %Y')} to {max_d.strftime('%d %b %Y')}."
         )
         return
 
@@ -3958,7 +3968,6 @@ def render_myntra_page():
             st.caption(f"Active Exchange Orders: {exch_cnt:,} | Avg Order Value (AOV): ₹{aov:,.0f}")
             _html("</div>")
 
-        # Placed at the bottom of tab2 as requested
         m_ctrl = p_df.copy()
         m_ctrl["_is_rto"] = is_rto_mask
         m_ctrl["_is_cret"] = is_cust_ret_mask
@@ -4428,7 +4437,6 @@ def render_nykaa_page():
         _safe_dataframe(st_tbl, use_container_width=True, height=230, hide_index=True)
         _html("</div>")
 
-        # Placed at the bottom of tab2 as requested
         n_ctrl = non_canc_df.copy()
         n_ctrl["_is_rto"] = n_ctrl["Status_Lower"].str.contains("rto", na=False)
         n_ctrl["_is_ret"] = (~n_ctrl["_is_rto"]) & n_ctrl["Status_Lower"].str.contains("return", na=False)
@@ -4541,3 +4549,4 @@ elif page_now == "🛍️ Myntra Analysis":
     render_myntra_page()
 elif page_now == "💄 Nykaa Analysis":
     render_nykaa_page()
+    
