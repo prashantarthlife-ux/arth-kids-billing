@@ -65,6 +65,24 @@ def _style_fig(
     return fig
 
 
+def _to_excel_bytes(df: pd.DataFrame, sheet_name: str = "Report") -> bytes:
+    """Export a DataFrame to an Excel (.xlsx) byte stream."""
+    safe_sheet = re.sub(r"[\\/*?:\[\]]", "", str(sheet_name or "Report"))[:31] or "Report"
+    out = io.BytesIO()
+    clean_df = df.copy() if df is not None else pd.DataFrame()
+    for col in clean_df.columns:
+        if pd.api.types.is_datetime64tz_dtype(clean_df[col]):
+            clean_df[col] = clean_df[col].dt.tz_localize(None)
+    try:
+        with pd.ExcelWriter(out, engine="openpyxl") as writer:
+            clean_df.to_excel(writer, sheet_name=safe_sheet, index=False)
+    except Exception:
+        with pd.ExcelWriter(out) as writer:
+            clean_df.to_excel(writer, sheet_name=safe_sheet, index=False)
+    out.seek(0)
+    return out.getvalue()
+
+
 _html("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -74,6 +92,7 @@ html, body, [class*="css"] {
 }
 .stApp {
     background: linear-gradient(180deg, #F8FAFC 0%, #EEF2FF 45%, #F4F6FB 100%);
+    overflow-x: hidden;
 }
 
 #MainMenu, footer { visibility: hidden; }
@@ -85,6 +104,7 @@ header[data-testid="stHeader"] { background: transparent !important; }
     padding-bottom: 2.4rem !important;
     padding-left: 1.8rem !important;
     padding-right: 1.8rem !important;
+    max-width: 100% !important;
 }
 
 section[data-testid="stSidebar"] {
@@ -133,6 +153,7 @@ section[data-testid="stSidebar"] {
     justify-content: space-between;
     align-items: center;
     gap: 12px;
+    flex-wrap: wrap;
 }
 .hub-brand-title { font-size: 18px; font-weight: 800; color: #0F172A; margin: 0; }
 .hub-brand-sub { font-size: 12px; color: #64748B; }
@@ -171,6 +192,7 @@ section[data-testid="stSidebar"] {
     justify-content: space-between;
     align-items: center;
     gap: 16px;
+    flex-wrap: wrap;
 }
 .exec-banner.myntra { background: linear-gradient(135deg, #0F172A 0%, #831843 55%, #7C3AED 100%); }
 .exec-banner.nykaa  { background: linear-gradient(135deg, #0F172A 0%, #9D174D 55%, #7C3AED 100%); }
@@ -210,7 +232,7 @@ div[data-testid="stPlotlyChart"] > div {
     border-radius: 0 0 14px 14px;
     overflow: hidden;
 }
-.kpi-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.kpi-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .kpi-lbl { font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.4px; }
 .kpi-pill-pos { background: #ECFDF5; color: #059669; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
 .kpi-pill-neg { background: #FFF1F2; color: #E11D48; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
@@ -330,6 +352,91 @@ div[data-testid="stPlotlyChart"] > div {
 .prod-meta { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; color: #1E293B; margin-bottom: 5px; }
 .prod-track { width: 100%; height: 9px; background: #F1F5F9; border-radius: 999px; overflow: hidden; }
 .prod-fill  { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #EC4899 0%, #8B5CF6 100%); }
+
+/* Tablet & Mobile Responsive Overrides */
+@media (max-width: 992px) {
+    .block-container {
+        padding-left: 1.0rem !important;
+        padding-right: 1.0rem !important;
+    }
+    .exec-banner {
+        padding: 18px 20px;
+        border-radius: 18px;
+    }
+    .exec-title {
+        font-size: 20px;
+    }
+    .kpi-main-num {
+        font-size: 24px;
+    }
+    .kpi-val {
+        font-size: 19px;
+    }
+}
+
+@media (max-width: 640px) {
+    .block-container {
+        padding-top: 0.65rem !important;
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+    .login-wrap {
+        margin: 24px auto 14px auto;
+        padding: 24px 18px;
+        border-radius: 18px;
+    }
+    .hub-topbar, .main-banner, .card-box, .viz-card {
+        padding: 12px 14px;
+        border-radius: 14px;
+    }
+    .hub-brand-title {
+        font-size: 15.5px;
+    }
+    .exec-banner {
+        padding: 14px 16px;
+        border-radius: 16px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    .exec-banner-left {
+        gap: 11px;
+    }
+    .exec-title {
+        font-size: 17px;
+    }
+    .exec-sub {
+        font-size: 11.5px;
+    }
+    .exec-pill {
+        font-size: 11.5px;
+        padding: 6px 12px;
+        white-space: normal;
+    }
+    .sec-title {
+        font-size: 15.5px;
+    }
+    .kpi-card {
+        padding: 14px 15px;
+        margin-bottom: 8px;
+    }
+    .kpi-main-num {
+        font-size: 22px;
+    }
+    .kpi-val {
+        font-size: 18px;
+    }
+    .kpi-ico {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        font-size: 22px;
+        border-radius: 12px;
+    }
+    .stButton > button, .stDownloadButton > button {
+        width: 100% !important;
+    }
+}
 </style>
 """)
 
@@ -1405,7 +1512,7 @@ with top_nav2:
 
 
 # ==============================================================================
-# 6. PAGE 1: DAILY ANALYSIS (WITH CONTAINED SPARKLINES)
+# 6. PAGE 1: DAILY ANALYSIS (WITH DAILY RTO STATUS & EXCHANGE STATUS + EXCEL)
 # ==============================================================================
 def render_daily_page():
     if model_src is None:
@@ -1430,7 +1537,7 @@ def render_daily_page():
         _html("""
         <div class="main-banner">
             <div class="main-h1">Arth life Daily Analysis</div>
-            <div class="main-sub">Particular Date KPIs + Automatic Rolling 7-Day Section-wise Analysis</div>
+            <div class="main-sub">Particular Date KPIs + Rolling 7-Day Trend, Daily RTO Status & Daily Exchange Status</div>
         </div>
         """)
     with b2:
@@ -1444,6 +1551,7 @@ def render_daily_page():
 
     start_7d = selected_date - datetime.timedelta(days=6)
     dates_7d = [start_7d + datetime.timedelta(days=i) for i in range(7)]
+    date_lbls_7d = [d.strftime("%d %b") for d in dates_7d]
     prev_date = selected_date - datetime.timedelta(days=1)
 
     f_orders = df_orders.copy()
@@ -1940,6 +2048,135 @@ def render_daily_page():
         fig_ex.update_yaxes(range=[0, max(df_7d["Exchange"].max(), 1) * 1.36])
         st.plotly_chart(fig_ex, use_container_width=True)
         _html(f'<div class="viz-info"><b>7D Exchange Pickups:</b> <b>{tot_7d_ex:,}</b></div></div>')
+
+    # --------------------------------------------------------------------------
+    # Section 2B — Daily RTO Status & Daily Exchange Status (Chart + Excel)
+    # --------------------------------------------------------------------------
+    _html('<div class="sec-bar">Section 2B — Daily RTO Status & Daily Exchange Status (7 Days + Excel Export)</div>')
+    s2b_l, s2b_r = st.columns(2)
+    status_palette = ["#EF4444", "#F97316", "#F59E0B", "#8B5CF6", "#0EA5E9", "#10B981", "#EC4899", "#64748B"]
+
+    with s2b_l:
+        _html('<div class="viz-card"><div class="viz-heading">🚚 Daily RTO Status Breakdown (7 Days)</div>')
+        rto_7d_df = f_disp[f_disp["_disp_d"].isin(dates_7d) & rto_mask].copy()
+        st_col_d = _find_col(rto_7d_df, ["Shipment_Status", "Status"]) if not rto_7d_df.empty else None
+        if not rto_7d_df.empty:
+            rto_7d_df["_rto_st"] = (
+                rto_7d_df[st_col_d].fillna("RTO").astype(str).str.strip().replace("", "RTO")
+                if st_col_d
+                else "RTO"
+            )
+            rto_st_piv = pd.DataFrame(0, index=date_lbls_7d, columns=sorted(rto_7d_df["_rto_st"].unique().tolist()))
+            for d_k, d_lbl in zip(dates_7d, date_lbls_7d):
+                sub_d = rto_7d_df[rto_7d_df["_disp_d"] == d_k]
+                if not sub_d.empty:
+                    vc = sub_d.groupby("_rto_st")["Base_Order_ID"].nunique()
+                    for k_st, v_cnt in vc.items():
+                        rto_st_piv.loc[d_lbl, k_st] = int(v_cnt)
+
+            fig_rto_st = go.Figure()
+            for idx_s, st_nm in enumerate(rto_st_piv.columns):
+                y_s = rto_st_piv[st_nm].to_numpy(dtype=int)
+                fig_rto_st.add_trace(
+                    go.Bar(
+                        x=rto_st_piv.index,
+                        y=y_s,
+                        name=st_nm,
+                        marker=dict(color=status_palette[idx_s % len(status_palette)], cornerradius=4),
+                        text=[str(v) if v > 0 else "" for v in y_s],
+                        textposition="inside",
+                    )
+                )
+            _style_fig(fig_rto_st, height=255, margins=dict(l=8, r=8, t=28, b=10), hovermode="x unified")
+            fig_rto_st.update_layout(barmode="stack")
+            st.plotly_chart(fig_rto_st, use_container_width=True, key="daily_rto_status_chart")
+
+            rto_excel_df = rto_st_piv.reset_index().rename(columns={"index": "Dispatch_Date"})
+            rto_excel_df["Total_RTO_Orders"] = rto_st_piv.sum(axis=1).values
+            st.download_button(
+                label="📊 Download Daily RTO Status (Excel)",
+                data=_to_excel_bytes(rto_excel_df, "Daily_RTO_Status"),
+                file_name=f"daily_rto_status_{start_7d}_{selected_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_daily_rto_status_xlsx",
+            )
+            _html(f'<div class="viz-info"><b>7D RTO Status Mix:</b> Total <b>{int(rto_st_piv.values.sum()):,}</b> RTO orders across <b>{len(rto_st_piv.columns)}</b> status(es).</div>')
+        else:
+            empty_rto_df = pd.DataFrame({"Dispatch_Date": date_lbls_7d, "RTO_Orders": [0] * 7})
+            st.download_button(
+                label="📊 Download Daily RTO Status (Excel)",
+                data=_to_excel_bytes(empty_rto_df, "Daily_RTO_Status"),
+                file_name=f"daily_rto_status_{start_7d}_{selected_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_daily_rto_status_empty_xlsx",
+            )
+            st.info("No RTO orders in the selected 7-day window.")
+        _html("</div>")
+
+    with s2b_r:
+        _html('<div class="viz-card"><div class="viz-heading">🔄 Daily Exchange Status Breakdown (7 Days)</div>')
+        ex_7d_df = f_rev[f_rev["_rev_d"].isin(dates_7d)].copy() if (not f_rev.empty and "_rev_d" in f_rev.columns) else pd.DataFrame()
+        ex_st_col = (
+            _find_col(ex_7d_df, ["Reverse_Status", "Return_Status", "Exchange_Status", "Status"])
+            if not ex_7d_df.empty
+            else None
+        )
+        ex_id_col = _find_col(ex_7d_df, ["Order_ID", "Base_Order_ID"]) if not ex_7d_df.empty else None
+        if not ex_7d_df.empty:
+            ex_7d_df["_ex_st"] = (
+                ex_7d_df[ex_st_col].fillna("Exchange").astype(str).str.strip().replace("", "Exchange")
+                if ex_st_col
+                else "Exchange"
+            )
+            ex_st_piv = pd.DataFrame(0, index=date_lbls_7d, columns=sorted(ex_7d_df["_ex_st"].unique().tolist()))
+            for d_k, d_lbl in zip(dates_7d, date_lbls_7d):
+                sub_e = ex_7d_df[ex_7d_df["_rev_d"] == d_k]
+                if not sub_e.empty:
+                    if ex_id_col:
+                        vc_e = sub_e.groupby("_ex_st")[ex_id_col].nunique()
+                    else:
+                        vc_e = sub_e.groupby("_ex_st").size()
+                    for k_st, v_cnt in vc_e.items():
+                        ex_st_piv.loc[d_lbl, k_st] = int(v_cnt)
+
+            fig_ex_st = go.Figure()
+            for idx_e, st_nm in enumerate(ex_st_piv.columns):
+                y_e = ex_st_piv[st_nm].to_numpy(dtype=int)
+                fig_ex_st.add_trace(
+                    go.Bar(
+                        x=ex_st_piv.index,
+                        y=y_e,
+                        name=st_nm,
+                        marker=dict(color=status_palette[(idx_e + 2) % len(status_palette)], cornerradius=4),
+                        text=[str(v) if v > 0 else "" for v in y_e],
+                        textposition="inside",
+                    )
+                )
+            _style_fig(fig_ex_st, height=255, margins=dict(l=8, r=8, t=28, b=10), hovermode="x unified")
+            fig_ex_st.update_layout(barmode="stack")
+            st.plotly_chart(fig_ex_st, use_container_width=True, key="daily_ex_status_chart")
+
+            ex_excel_df = ex_st_piv.reset_index().rename(columns={"index": "Pickup_Date"})
+            ex_excel_df["Total_Exchange_Orders"] = ex_st_piv.sum(axis=1).values
+            st.download_button(
+                label="📊 Download Daily Exchange Status (Excel)",
+                data=_to_excel_bytes(ex_excel_df, "Daily_Exchange_Status"),
+                file_name=f"daily_exchange_status_{start_7d}_{selected_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_daily_ex_status_xlsx",
+            )
+            _html(f'<div class="viz-info"><b>7D Exchange Status Mix:</b> Total <b>{int(ex_st_piv.values.sum()):,}</b> exchange pickups across <b>{len(ex_st_piv.columns)}</b> status(es).</div>')
+        else:
+            empty_ex_df = pd.DataFrame({"Pickup_Date": date_lbls_7d, "Exchange_Orders": [0] * 7})
+            st.download_button(
+                label="📊 Download Daily Exchange Status (Excel)",
+                data=_to_excel_bytes(empty_ex_df, "Daily_Exchange_Status"),
+                file_name=f"daily_exchange_status_{start_7d}_{selected_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_daily_ex_status_empty_xlsx",
+            )
+            st.info("No exchange records in the selected 7-day window.")
+        _html("</div>")
 
     _html('<div class="sec-bar">Section 3 — MOM RTO & Actionable Unfulfilled Orders</div>')
     s3_1, s3_2 = st.columns([1.0, 1.6])
@@ -3095,9 +3332,9 @@ def render_shopify_forecast_page():
         st.rerun()
 
     with c_f2:
-        range_start = st.date_input("📅 Start Date", min_value=min_d, max_value=max_d, key="shp_fc_start")
+        range_start = st.date_input("📅 Start Date", min_value=min_dt, max_value=max_dt, key="shp_fc_start")
     with c_f3:
-        range_end = st.date_input("📅 End Date", min_value=min_d, max_value=max_d, key="shp_fc_end")
+        range_end = st.date_input("📅 End Date", min_value=min_dt, max_value=max_dt, key="shp_fc_end")
     with c_f4:
         horizon_days = st.selectbox(
             "🔮 Forecast Horizon",
@@ -4549,4 +4786,3 @@ elif page_now == "🛍️ Myntra Analysis":
     render_myntra_page()
 elif page_now == "💄 Nykaa Analysis":
     render_nykaa_page()
-    
