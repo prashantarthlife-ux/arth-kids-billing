@@ -65,20 +65,29 @@ def _style_fig(
     return fig
 
 
-def _to_excel_bytes(df: pd.DataFrame, sheet_name: str = "Report") -> bytes:
-    """Export a DataFrame to an Excel (.xlsx) byte stream."""
-    safe_sheet = re.sub(r"[\\/*?:\[\]]", "", str(sheet_name or "Report"))[:31] or "Report"
+def _to_excel_bytes(data_or_sheets, sheet_name: str = "Report") -> bytes:
+    """Export a DataFrame or dict of {sheet_name: df} to an Excel (.xlsx) byte stream."""
     out = io.BytesIO()
-    clean_df = df.copy() if df is not None else pd.DataFrame()
-    for col in clean_df.columns:
-        if pd.api.types.is_datetime64tz_dtype(clean_df[col]):
-            clean_df[col] = clean_df[col].dt.tz_localize(None)
+    sheets = data_or_sheets if isinstance(data_or_sheets, dict) else {sheet_name: data_or_sheets}
+    clean_sheets = {}
+    for s_nm, raw_df in sheets.items():
+        safe_s = re.sub(r"[\\/*?:\[\]]", "", str(s_nm or "Report"))[:31] or "Report"
+        while safe_s in clean_sheets:
+            safe_s = (safe_s[:28] + f"_{len(clean_sheets)+1}")[:31]
+        cdf = raw_df.copy() if raw_df is not None else pd.DataFrame()
+        for col in cdf.columns:
+            if pd.api.types.is_datetime64tz_dtype(cdf[col]):
+                cdf[col] = cdf[col].dt.tz_localize(None)
+        clean_sheets[safe_s] = cdf
+
     try:
         with pd.ExcelWriter(out, engine="openpyxl") as writer:
-            clean_df.to_excel(writer, sheet_name=safe_sheet, index=False)
+            for s_nm, cdf in clean_sheets.items():
+                cdf.to_excel(writer, sheet_name=s_nm, index=False)
     except Exception:
         with pd.ExcelWriter(out) as writer:
-            clean_df.to_excel(writer, sheet_name=safe_sheet, index=False)
+            for s_nm, cdf in clean_sheets.items():
+                cdf.to_excel(writer, sheet_name=s_nm, index=False)
     out.seek(0)
     return out.getvalue()
 
@@ -2050,12 +2059,13 @@ def render_daily_page():
         _html(f'<div class="viz-info"><b>7D Exchange Pickups:</b> <b>{tot_7d_ex:,}</b></div></div>')
 
     # --------------------------------------------------------------------------
-    # Section 2B — Daily RTO Status & Daily Exchange Status (Chart + Excel)
+    # Section 2B — Daily RTO Status & Daily Exchange Status (Chart + Full Excel)
     # --------------------------------------------------------------------------
-    _html('<div class="sec-bar">Section 2B — Daily RTO Status & Daily Exchange Status (7 Days + Excel Export)</div>')
+    _html('<div class="sec-bar">Section 2B — Daily RTO Status & Daily Exchange Status (7 Days + Full Data Excel)</div>')
     s2b_l, s2b_r = st.columns(2)
     status_palette = ["#EF4444", "#F97316", "#F59E0B", "#8B5CF6", "#0EA5E9", "#10B981", "#EC4899", "#64748B"]
 
+    # Daily RTO Status (Chart + Full Row-Level Table + Multi-Sheet Excel)
     with s2b_l:
         _html('<div class="viz-card"><div class="viz-heading">🚚 Daily RTO Status Breakdown (7 Days)</div>')
         rto_7d_df = f_disp[f_disp["_disp_d"].isin(dates_7d) & rto_mask].copy()
@@ -2087,32 +2097,54 @@ def render_daily_page():
                         textposition="inside",
                     )
                 )
-            _style_fig(fig_rto_st, height=255, margins=dict(l=8, r=8, t=28, b=10), hovermode="x unified")
+            _style_fig(fig_rto_st, height=245, margins=dict(l=8, r=8, t=28, b=10), hovermode="x unified")
             fig_rto_st.update_layout(barmode="stack")
             st.plotly_chart(fig_rto_st, use_container_width=True, key="daily_rto_status_chart")
 
-            rto_excel_df = rto_st_piv.reset_index().rename(columns={"index": "Dispatch_Date"})
-            rto_excel_df["Total_RTO_Orders"] = rto_st_piv.sum(axis=1).values
+            rto_full_cols = [
+                c
+                for c in [
+                    "Base_Order_ID",
+                    "Order_ID",
+                    "Dispatch_Date",
+                    "Order_Date",
+                    "Customer_Name",
+                    "Carrier",
+                    "Tracking_Number",
+                    "Shipment_Status",
+                    "Amount",
+                    "Order_Notes",
+                ]
+                if c in rto_7d_df.columns
+            ]
+            rto_full_view = rto_7d_df.sort_values(by="Dispatch_Date_dt", ascending=False)[
+                rto_full_cols if rto_full_cols else rto_7d_df.columns.tolist()
+            ]
+            rto_sum_df = rto_st_piv.reset_index().rename(columns={"index": "Dispatch_Date"})
+            rto_sum_df["Total_RTO_Orders"] = rto_st_piv.sum(axis=1).values
+
             st.download_button(
-                label="📊 Download Daily RTO Status (Excel)",
-                data=_to_excel_bytes(rto_excel_df, "Daily_RTO_Status"),
-                file_name=f"daily_rto_status_{start_7d}_{selected_date}.xlsx",
+                label="📊 Download Full RTO Status Data (Excel)",
+                data=_to_excel_bytes({"RTO_Full_Details": rto_full_view, "RTO_Daily_Summary": rto_sum_df}),
+                file_name=f"daily_rto_status_full_{start_7d}_{selected_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="dl_daily_rto_status_xlsx",
             )
-            _html(f'<div class="viz-info"><b>7D RTO Status Mix:</b> Total <b>{int(rto_st_piv.values.sum()):,}</b> RTO orders across <b>{len(rto_st_piv.columns)}</b> status(es).</div>')
+            _safe_dataframe(rto_full_view, use_container_width=True, height=195, hide_index=True)
+            _html(f'<div class="viz-info"><b>7D RTO Full Records:</b> <b>{len(rto_full_view):,}</b> rows ({int(rto_st_piv.values.sum()):,} unique orders) across <b>{len(rto_st_piv.columns)}</b> status(es).</div>')
         else:
             empty_rto_df = pd.DataFrame({"Dispatch_Date": date_lbls_7d, "RTO_Orders": [0] * 7})
             st.download_button(
-                label="📊 Download Daily RTO Status (Excel)",
-                data=_to_excel_bytes(empty_rto_df, "Daily_RTO_Status"),
-                file_name=f"daily_rto_status_{start_7d}_{selected_date}.xlsx",
+                label="📊 Download Full RTO Status Data (Excel)",
+                data=_to_excel_bytes({"RTO_Full_Details": pd.DataFrame(), "RTO_Daily_Summary": empty_rto_df}),
+                file_name=f"daily_rto_status_full_{start_7d}_{selected_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="dl_daily_rto_status_empty_xlsx",
             )
             st.info("No RTO orders in the selected 7-day window.")
         _html("</div>")
 
+    # Daily Exchange Status (Chart + Full Row-Level Table + Multi-Sheet Excel)
     with s2b_r:
         _html('<div class="viz-card"><div class="viz-heading">🔄 Daily Exchange Status Breakdown (7 Days)</div>')
         ex_7d_df = f_rev[f_rev["_rev_d"].isin(dates_7d)].copy() if (not f_rev.empty and "_rev_d" in f_rev.columns) else pd.DataFrame()
@@ -2132,10 +2164,7 @@ def render_daily_page():
             for d_k, d_lbl in zip(dates_7d, date_lbls_7d):
                 sub_e = ex_7d_df[ex_7d_df["_rev_d"] == d_k]
                 if not sub_e.empty:
-                    if ex_id_col:
-                        vc_e = sub_e.groupby("_ex_st")[ex_id_col].nunique()
-                    else:
-                        vc_e = sub_e.groupby("_ex_st").size()
+                    vc_e = sub_e.groupby("_ex_st")[ex_id_col].nunique() if ex_id_col else sub_e.groupby("_ex_st").size()
                     for k_st, v_cnt in vc_e.items():
                         ex_st_piv.loc[d_lbl, k_st] = int(v_cnt)
 
@@ -2152,26 +2181,35 @@ def render_daily_page():
                         textposition="inside",
                     )
                 )
-            _style_fig(fig_ex_st, height=255, margins=dict(l=8, r=8, t=28, b=10), hovermode="x unified")
+            _style_fig(fig_ex_st, height=245, margins=dict(l=8, r=8, t=28, b=10), hovermode="x unified")
             fig_ex_st.update_layout(barmode="stack")
             st.plotly_chart(fig_ex_st, use_container_width=True, key="daily_ex_status_chart")
 
-            ex_excel_df = ex_st_piv.reset_index().rename(columns={"index": "Pickup_Date"})
-            ex_excel_df["Total_Exchange_Orders"] = ex_st_piv.sum(axis=1).values
+            ex_full_cols = [c for c in ex_7d_df.columns if not c.startswith("_") and not c.endswith("_dt")]
+            ex_sort_col = "Pickup_Date_dt" if "Pickup_Date_dt" in ex_7d_df.columns else None
+            ex_full_view = (
+                ex_7d_df.sort_values(by=ex_sort_col, ascending=False)[ex_full_cols]
+                if ex_sort_col
+                else ex_7d_df[ex_full_cols]
+            )
+            ex_sum_df = ex_st_piv.reset_index().rename(columns={"index": "Pickup_Date"})
+            ex_sum_df["Total_Exchange_Orders"] = ex_st_piv.sum(axis=1).values
+
             st.download_button(
-                label="📊 Download Daily Exchange Status (Excel)",
-                data=_to_excel_bytes(ex_excel_df, "Daily_Exchange_Status"),
-                file_name=f"daily_exchange_status_{start_7d}_{selected_date}.xlsx",
+                label="📊 Download Full Exchange Status Data (Excel)",
+                data=_to_excel_bytes({"Exchange_Full_Details": ex_full_view, "Exchange_Daily_Summary": ex_sum_df}),
+                file_name=f"daily_exchange_status_full_{start_7d}_{selected_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="dl_daily_ex_status_xlsx",
             )
-            _html(f'<div class="viz-info"><b>7D Exchange Status Mix:</b> Total <b>{int(ex_st_piv.values.sum()):,}</b> exchange pickups across <b>{len(ex_st_piv.columns)}</b> status(es).</div>')
+            _safe_dataframe(ex_full_view, use_container_width=True, height=195, hide_index=True)
+            _html(f'<div class="viz-info"><b>7D Exchange Full Records:</b> <b>{len(ex_full_view):,}</b> rows ({int(ex_st_piv.values.sum()):,} unique orders) across <b>{len(ex_st_piv.columns)}</b> status(es).</div>')
         else:
             empty_ex_df = pd.DataFrame({"Pickup_Date": date_lbls_7d, "Exchange_Orders": [0] * 7})
             st.download_button(
-                label="📊 Download Daily Exchange Status (Excel)",
-                data=_to_excel_bytes(empty_ex_df, "Daily_Exchange_Status"),
-                file_name=f"daily_exchange_status_{start_7d}_{selected_date}.xlsx",
+                label="📊 Download Full Exchange Status Data (Excel)",
+                data=_to_excel_bytes({"Exchange_Full_Details": pd.DataFrame(), "Exchange_Daily_Summary": empty_ex_df}),
+                file_name=f"daily_exchange_status_full_{start_7d}_{selected_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="dl_daily_ex_status_empty_xlsx",
             )
