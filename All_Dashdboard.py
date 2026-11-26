@@ -165,7 +165,7 @@ section[data-testid="stSidebar"] {
     border-radius: 22px;
     padding: 22px 28px;
     color: #FFFFFF;
-    margin-bottom: 18px;
+    margin-bottom: 16px;
     box-shadow: 0 14px 30px rgba(30, 41, 59, 0.18);
     display: flex;
     justify-content: space-between;
@@ -1982,7 +1982,7 @@ def render_daily_page():
 
 
 # ==============================================================================
-# 7. PAGE 2: SHOPIFY ANALYSIS (RTO & RETURN CONTROL AT BOTTOM OF TAB 2)
+# 7. PAGE 2: SHOPIFY ANALYSIS (BANNER ON TOP + RTO & RETURN CONTROL AT BOTTOM)
 # ==============================================================================
 def render_shopify_page():
     if model_src is None:
@@ -2003,6 +2003,22 @@ def render_shopify_page():
     def_end_shp = _resolve_default_latest_date(min_d, max_d)
     def_start_shp, _ = _month_bounds(latest_m_shp, min_d, def_end_shp)
     _sync_refresh_dates("shp", min_d, max_d, def_start_shp, def_end_shp)
+
+    disp_start = st.session_state.get("shp_start_date", def_start_shp)
+    disp_end = st.session_state.get("shp_end_date", def_end_shp)
+
+    _html(f"""
+    <div class="exec-banner">
+        <div class="exec-banner-left">
+            {LOGO_BANNER_HTML}
+            <div>
+                <div class="exec-title">ARTH LIFE Kids Fashion — Shopify Analysis</div>
+                <div class="exec-sub">Pure RTO & Cancelled Exchange Returns, Financial KPIs & SKU/Size Return Control</div>
+            </div>
+        </div>
+        <div class="exec-pill">📅 Created: {disp_start.strftime('%d %b %Y')} — {disp_end.strftime('%d %b %Y')}</div>
+    </div>
+    """)
 
     f_c1, f_c2, f_c3, f_c4 = st.columns([1.15, 1.05, 1.0, 1.0])
     with f_c1:
@@ -2035,6 +2051,7 @@ def render_shopify_page():
         st.session_state["_shp_last_choice"] = (sel_m_shp, preset)
         st.session_state["shp_start_date"] = p_s
         st.session_state["shp_end_date"] = p_e
+        st.rerun()
 
     with f_c3:
         start_date = st.date_input("📅 Start Date", min_value=min_d, max_value=max_d, key="shp_start_date")
@@ -2044,19 +2061,6 @@ def render_shopify_page():
     if start_date > end_date:
         st.error("Start Date must be on or before End Date.")
         return
-
-    _html(f"""
-    <div class="exec-banner">
-        <div class="exec-banner-left">
-            {LOGO_BANNER_HTML}
-            <div>
-                <div class="exec-title">ARTH LIFE Kids Fashion — Shopify Analysis</div>
-                <div class="exec-sub">Pure RTO & Cancelled Exchange Returns, Financial KPIs & SKU/Size Return Control</div>
-            </div>
-        </div>
-        <div class="exec-pill">📅 Created: {start_date.strftime('%d %b %Y')} — {end_date.strftime('%d %b %Y')}</div>
-    </div>
-    """)
 
     p_orders = df_orders[
         (df_orders["Order_Date_dt"].dt.date >= start_date)
@@ -2984,7 +2988,7 @@ def render_shopify_page():
 
 
 # ==============================================================================
-# 7B. PAGE 2B: SHOPIFY FORECAST & COHORT (NON-ZERO FORECAST + COHORT AT BOTTOM)
+# 7B. PAGE 2B: SHOPIFY FORECAST & COHORT (BANNER ON TOP + COHORT AT BOTTOM)
 # ==============================================================================
 def render_shopify_forecast_page():
     """Render Shopify July-to-latest-month comparison, forecast & Customer Cohort Analysis at bottom."""
@@ -3041,6 +3045,21 @@ def render_shopify_forecast_page():
         st.session_state["shp_fc_start"] = m_start_fc
         st.session_state["shp_fc_end"] = latest_end_fc
 
+    disp_h_fc = st.session_state.get("shp_fc_horizon", 14)
+
+    _html(f"""
+    <div class="exec-banner">
+        <div class="exec-banner-left">
+            {LOGO_BANNER_HTML}
+            <div>
+                <div class="exec-title">ARTH LIFE Kids Fashion — Shopify Forecast & Comparison</div>
+                <div class="exec-sub">July ({start_bound.strftime('%b %Y')}) to Latest ({max_dt.strftime('%d %b %Y')}) • Period Comparison, Seasonality, Risk, Forecast & Cohort</div>
+            </div>
+        </div>
+        <div class="exec-pill">🔮 +{disp_h_fc}d Forecast</div>
+    </div>
+    """)
+
     c_f1, c_f2, c_f3, c_f4, c_f5, c_f6 = st.columns([1.05, 0.95, 0.95, 0.9, 1.1, 0.85])
     with c_f1:
         sel_m_fc = st.selectbox(
@@ -3059,6 +3078,7 @@ def render_shopify_forecast_page():
             ms_c, me_c = _month_bounds(m_c, min_dt, max_dt)
             st.session_state["shp_fc_start"] = ms_c
             st.session_state["shp_fc_end"] = max(me_c, latest_end_fc) if m_c == latest_m_fc else me_c
+        st.rerun()
 
     with c_f2:
         range_start = st.date_input("📅 Start Date", min_value=min_dt, max_value=max_dt, key="shp_fc_start")
@@ -3091,19 +3111,6 @@ def render_shopify_forecast_page():
     if range_start > range_end:
         st.error("Analysis Start Date must be on or before Analysis End Date.")
         return
-
-    _html(f"""
-    <div class="exec-banner">
-        <div class="exec-banner-left">
-            {LOGO_BANNER_HTML}
-            <div>
-                <div class="exec-title">ARTH LIFE Kids Fashion — Shopify Forecast & Comparison</div>
-                <div class="exec-sub">July ({start_bound.strftime('%b %Y')}) to Latest ({max_dt.strftime('%d %b %Y')}) • Period Comparison, Seasonality, Risk, Forecast & Cohort</div>
-            </div>
-        </div>
-        <div class="exec-pill">🔮 +{horizon_days}d Forecast</div>
-    </div>
-    """)
 
     cur_df = orders_clean[
         (orders_clean["_dt"].dt.date >= range_start) & (orders_clean["_dt"].dt.date <= range_end)
@@ -3507,7 +3514,7 @@ def render_shopify_forecast_page():
 
 
 # ==============================================================================
-# 8. PAGE 3: MYNTRA ANALYSIS (CLAMPED TO AVAILABLE DATA DATES + RTO CONTROL)
+# 8. PAGE 3: MYNTRA ANALYSIS (BANNER ON TOP + CLAMPED DATES + RTO CONTROL)
 # ==============================================================================
 def render_myntra_page():
     """Render Myntra analytics clamped strictly to available data dates."""
@@ -3529,6 +3536,22 @@ def render_myntra_page():
     def_end_myn = max_d
     def_start_myn, _ = _month_bounds(latest_m_myn, min_d, def_end_myn)
     _sync_refresh_dates("myntra", min_d, max_d, def_start_myn, def_end_myn)
+
+    disp_m_start = st.session_state.get("myntra_start_date", def_start_myn)
+    disp_m_end = st.session_state.get("myntra_end_date", def_end_myn)
+
+    _html(f"""
+    <div class="exec-banner myntra">
+        <div class="exec-banner-left">
+            {LOGO_BANNER_HTML}
+            <div>
+                <div class="exec-title">ARTH LIFE Kids Fashion — Myntra Analysis</div>
+                <div class="exec-sub">Connected to Myntra_Consolidated_Orders.xlsx • Data Available: {min_d.strftime('%d %b %Y')} to {max_d.strftime('%d %b %Y')}</div>
+            </div>
+        </div>
+        <div class="exec-pill">📅 Created: {disp_m_start.strftime('%d %b %Y')} — {disp_m_end.strftime('%d %b %Y')}</div>
+    </div>
+    """)
 
     f1, f2, f3, f4, f5 = st.columns([1.15, 1.05, 0.95, 0.95, 1.35])
     with f1:
@@ -3571,6 +3594,7 @@ def render_myntra_page():
         st.session_state["_myn_last_choice"] = (sel_m_myn, preset)
         st.session_state["myntra_start_date"] = p_s
         st.session_state["myntra_end_date"] = p_e
+        st.rerun()
 
     all_comb_statuses = sorted(df_all["Combined_Status"].unique().tolist())
 
@@ -3592,19 +3616,6 @@ def render_myntra_page():
     if start_date > end_date:
         st.error("Start Date must be on or before End Date.")
         return
-
-    _html(f"""
-    <div class="exec-banner myntra">
-        <div class="exec-banner-left">
-            {LOGO_BANNER_HTML}
-            <div>
-                <div class="exec-title">ARTH LIFE Kids Fashion — Myntra Analysis</div>
-                <div class="exec-sub">Connected to Myntra_Consolidated_Orders.xlsx • Data Available: {min_d.strftime('%d %b %Y')} to {max_d.strftime('%d %b %Y')}</div>
-            </div>
-        </div>
-        <div class="exec-pill">📅 Created: {start_date.strftime('%d %b %Y')} — {end_date.strftime('%d %b %Y')}</div>
-    </div>
-    """)
 
     p_df = df_all[
         (df_all["order_date_dt"].dt.date >= start_date)
@@ -4056,7 +4067,7 @@ def render_myntra_page():
 
 
 # ==============================================================================
-# 9. PAGE 4: NYKAA ANALYSIS (RTO & RETURN CONTROL AT BOTTOM OF TAB 2)
+# 9. PAGE 4: NYKAA ANALYSIS (BANNER ON TOP + RTO & RETURN CONTROL AT BOTTOM)
 # ==============================================================================
 def render_nykaa_page():
     if nykaa_src is None:
@@ -4078,6 +4089,22 @@ def render_nykaa_page():
     def_start_nyk, _ = _month_bounds(latest_m_nyk, min_d, def_end_nyk)
     _sync_refresh_dates("nykaa", min_d, max_d, def_start_nyk, def_end_nyk)
 
+    disp_n_start = st.session_state.get("nykaa_start_date", def_start_nyk)
+    disp_n_end = st.session_state.get("nykaa_end_date", def_end_nyk)
+
+    _html(f"""
+    <div class="exec-banner nykaa">
+        <div class="exec-banner-left">
+            {LOGO_BANNER_HTML}
+            <div>
+                <div class="exec-title">ARTH LIFE Kids Fashion — Nykaa Analysis</div>
+                <div class="exec-sub">Connected to OrderExport (16).xls • Web Orders, RTO/Return Analysis, SKU Control & Net Revenue</div>
+            </div>
+        </div>
+        <div class="exec-pill">📅 Orders: {disp_n_start.strftime('%d %b %Y')} — {disp_n_end.strftime('%d %b %Y')}</div>
+    </div>
+    """)
+
     f1, f2, f3, f4, f5, f6 = st.columns([1.05, 0.95, 0.85, 0.85, 1.05, 1.2])
     with f1:
         sel_m_nyk = st.selectbox(
@@ -4095,10 +4122,10 @@ def render_nykaa_page():
         )
     if preset == "01 Oct – 31 Oct 2026":
         p_s = min(max(datetime.date(2026, 10, 1), min_d), max_d)
-        p_e = max(min(datetime.date(2026, 11, 5), max_d), min_d)
+        p_e = max(min(datetime.date(2026, 10, 31), max_d), min_d)
     elif preset == "01 Jul – 31 Oct 2026":
         p_s = min(max(datetime.date(2026, 7, 1), min_d), max_d)
-        p_e = max(min(datetime.date(2026, 11, 30), max_d), min_d)
+        p_e = max(min(datetime.date(2026, 10, 31), max_d), min_d)
     elif preset == "All Available Dates" or sel_m_nyk == "All Available Dates":
         p_s, p_e = min_d, max_d
     else:
@@ -4109,6 +4136,7 @@ def render_nykaa_page():
         st.session_state["_nyk_last_choice"] = (sel_m_nyk, preset)
         st.session_state["nykaa_start_date"] = p_s
         st.session_state["nykaa_end_date"] = p_e
+        st.rerun()
 
     all_otypes = sorted(df_all["Order_Type_Clean"].unique().tolist())
     all_statuses = sorted(df_all["Status_Clean"].unique().tolist())
@@ -4130,19 +4158,6 @@ def render_nykaa_page():
     if start_date > end_date:
         st.error("Start Date must be on or before End Date.")
         return
-
-    _html(f"""
-    <div class="exec-banner nykaa">
-        <div class="exec-banner-left">
-            {LOGO_BANNER_HTML}
-            <div>
-                <div class="exec-title">ARTH LIFE Kids Fashion — Nykaa Analysis</div>
-                <div class="exec-sub">Connected to OrderExport (16).xls • Web Orders, RTO/Return Analysis, SKU Control & Net Revenue</div>
-            </div>
-        </div>
-        <div class="exec-pill">📅 Orders: {start_date.strftime('%d %b %Y')} — {end_date.strftime('%d %b %Y')}</div>
-    </div>
-    """)
 
     p_df = df_all[
         (df_all["Order_Date_dt"].dt.date >= start_date)
