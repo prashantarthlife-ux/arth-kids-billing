@@ -28,6 +28,85 @@ def _html(raw_html: str):
   st.markdown("".join(lines), unsafe_allow_html=True)
 
 
+def _style_fig(
+    fig: go.Figure,
+    height: int = 360,
+    margins: dict = None,
+    showlegend: bool = True,
+    hovermode: str = "closest",
+) -> go.Figure:
+  """Apply consistent executive SaaS styling to Plotly figures."""
+  m = margins or dict(l=14, r=18, t=34, b=26)
+  fig.update_layout(
+      height=height,
+      margin=m,
+      paper_bgcolor="rgba(0,0,0,0)",
+      plot_bgcolor="rgba(0,0,0,0)",
+      hovermode=hovermode,
+      showlegend=showlegend,
+      font=dict(
+          family="Plus Jakarta Sans, sans-serif", size=11.5, color="#1E293B"
+      ),
+      hoverlabel=dict(
+          bgcolor="#0F172A",
+          bordercolor="#334155",
+          font=dict(
+              family="Plus Jakarta Sans, sans-serif", size=12, color="#FFFFFF"
+          ),
+      ),
+      legend=dict(
+          orientation="h",
+          yanchor="bottom",
+          y=1.03,
+          xanchor="right",
+          x=1,
+          bgcolor="rgba(255,255,255,0.75)",
+          font=dict(size=11.5, color="#1E293B"),
+      ),
+  )
+  fig.update_xaxes(
+      showgrid=False, zeroline=False, tickfont=dict(color="#475569", size=11)
+  )
+  fig.update_yaxes(
+      showgrid=True,
+      gridcolor="#EEF2F6",
+      zeroline=False,
+      tickfont=dict(color="#475569", size=11),
+  )
+  return fig
+
+
+def _to_excel_bytes(data_or_sheets, sheet_name: str = "Report") -> bytes:
+  """Export a DataFrame or dict of {sheet_name: df} to an Excel (.xlsx) byte stream."""
+  out = io.BytesIO()
+  sheets = (
+      data_or_sheets
+      if isinstance(data_or_sheets, dict)
+      else {sheet_name: data_or_sheets}
+  )
+  clean_sheets = {}
+  for s_nm, raw_df in sheets.items():
+    safe_s = re.sub(r"[\\/*?:\[\]]", "", str(s_nm or "Report"))[:31] or "Report"
+    while safe_s in clean_sheets:
+      safe_s = (safe_s[:28] + f"_{len(clean_sheets)+1}")[:31]
+    cdf = raw_df.copy() if raw_df is not None else pd.DataFrame()
+    for col in cdf.columns:
+      if pd.api.types.is_datetime64tz_dtype(cdf[col]):
+        cdf[col] = cdf[col].dt.tz_localize(None)
+    clean_sheets[safe_s] = cdf
+
+  try:
+    with pd.ExcelWriter(out, engine="openpyxl") as writer:
+      for s_nm, cdf in clean_sheets.items():
+        cdf.to_excel(writer, sheet_name=s_nm, index=False)
+  except Exception:
+    with pd.ExcelWriter(out) as writer:
+      for s_nm, cdf in clean_sheets.items():
+        cdf.to_excel(writer, sheet_name=s_nm, index=False)
+  out.seek(0)
+  return out.getvalue()
+
+
 _html("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -37,6 +116,7 @@ html, body, [class*="css"] {
 }
 .stApp {
     background: linear-gradient(180deg, #F8FAFC 0%, #EEF2FF 45%, #F4F6FB 100%);
+    overflow-x: hidden;
 }
 
 #MainMenu, footer { visibility: hidden; }
@@ -48,6 +128,7 @@ header[data-testid="stHeader"] { background: transparent !important; }
     padding-bottom: 2.4rem !important;
     padding-left: 1.8rem !important;
     padding-right: 1.8rem !important;
+    max-width: 100% !important;
 }
 
 section[data-testid="stSidebar"] {
@@ -96,17 +177,10 @@ section[data-testid="stSidebar"] {
     justify-content: space-between;
     align-items: center;
     gap: 12px;
+    flex-wrap: wrap;
 }
-.hub-brand-title {
-    font-size: 18px;
-    font-weight: 800;
-    color: #0F172A;
-    margin: 0;
-}
-.hub-brand-sub {
-    font-size: 12px;
-    color: #64748B;
-}
+.hub-brand-title { font-size: 18px; font-weight: 800; color: #0F172A; margin: 0; }
+.hub-brand-sub { font-size: 12px; color: #64748B; }
 .hub-status-badge {
     background: #EEF2FF;
     color: #4338CA;
@@ -136,12 +210,13 @@ section[data-testid="stSidebar"] {
     border-radius: 22px;
     padding: 22px 28px;
     color: #FFFFFF;
-    margin-bottom: 18px;
+    margin-bottom: 16px;
     box-shadow: 0 14px 30px rgba(30, 41, 59, 0.18);
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 16px;
+    flex-wrap: wrap;
 }
 .exec-banner.myntra { background: linear-gradient(135deg, #0F172A 0%, #831843 55%, #7C3AED 100%); }
 .exec-banner.nykaa  { background: linear-gradient(135deg, #0F172A 0%, #9D174D 55%, #7C3AED 100%); }
@@ -172,11 +247,16 @@ section[data-testid="stSidebar"] {
     background: #FFFFFF;
     border: 1px solid #E2E8F0;
     border-top: 4px solid var(--accent, #4F46E5);
-    border-radius: 14px 14px 4px 4px;
-    padding: 14px 16px 10px 16px;
+    border-bottom: none;
+    border-radius: 14px 14px 0 0;
+    padding: 14px 16px 8px 16px;
     box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
 }
-.kpi-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+div[data-testid="stPlotlyChart"] > div {
+    border-radius: 0 0 14px 14px;
+    overflow: hidden;
+}
+.kpi-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .kpi-lbl { font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.4px; }
 .kpi-pill-pos { background: #ECFDF5; color: #059669; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
 .kpi-pill-neg { background: #FFF1F2; color: #E11D48; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
@@ -187,18 +267,18 @@ section[data-testid="stSidebar"] {
 .viz-card {
     background: #FFFFFF;
     border: 1px solid #E2E8F0;
-    border-radius: 14px;
-    padding: 12px 14px 10px 14px;
-    box-shadow: 0 3px 12px rgba(15, 23, 42, 0.04);
+    border-radius: 16px;
+    padding: 14px 16px 12px 16px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
     margin-bottom: 14px;
 }
-.viz-heading { text-align: center; font-size: 14px; font-weight: 700; color: #0F172A; margin-bottom: 4px; }
+.viz-heading { text-align: center; font-size: 14.5px; font-weight: 800; color: #0F172A; margin-bottom: 6px; }
 .viz-info {
     background: #F8FAFC;
     border: 1px solid #E2E8F0;
-    border-radius: 8px;
-    padding: 7px 10px;
-    margin-top: 6px;
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin-top: 8px;
     font-size: 12px;
     color: #334155;
 }
@@ -225,6 +305,17 @@ section[data-testid="stSidebar"] {
     border-top: 1px solid #EDE9FE;
     border-right: 1px solid #EDE9FE;
     border-bottom: 1px solid #EDE9FE;
+}
+.sec-header-ctrl {
+    background: linear-gradient(90deg, #FFFBEB 0%, #FFFFFF 100%);
+    border-left: 5px solid #F59E0B;
+    border-radius: 14px;
+    padding: 14px 20px;
+    margin-top: 24px;
+    margin-bottom: 14px;
+    border-top: 1px solid #FEF3C7;
+    border-right: 1px solid #FEF3C7;
+    border-bottom: 1px solid #FEF3C7;
 }
 .sec-title { font-size: 18px; font-weight: 800; color: #0F172A; margin: 0; }
 .sec-sub   { font-size: 12.5px; color: #64748B; margin-top: 2px; }
@@ -285,6 +376,91 @@ section[data-testid="stSidebar"] {
 .prod-meta { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; color: #1E293B; margin-bottom: 5px; }
 .prod-track { width: 100%; height: 9px; background: #F1F5F9; border-radius: 999px; overflow: hidden; }
 .prod-fill  { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #EC4899 0%, #8B5CF6 100%); }
+
+/* Tablet & Mobile Responsive Overrides */
+@media (max-width: 992px) {
+    .block-container {
+        padding-left: 1.0rem !important;
+        padding-right: 1.0rem !important;
+    }
+    .exec-banner {
+        padding: 18px 20px;
+        border-radius: 18px;
+    }
+    .exec-title {
+        font-size: 20px;
+    }
+    .kpi-main-num {
+        font-size: 24px;
+    }
+    .kpi-val {
+        font-size: 19px;
+    }
+}
+
+@media (max-width: 640px) {
+    .block-container {
+        padding-top: 0.65rem !important;
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+    .login-wrap {
+        margin: 24px auto 14px auto;
+        padding: 24px 18px;
+        border-radius: 18px;
+    }
+    .hub-topbar, .main-banner, .card-box, .viz-card {
+        padding: 12px 14px;
+        border-radius: 14px;
+    }
+    .hub-brand-title {
+        font-size: 15.5px;
+    }
+    .exec-banner {
+        padding: 14px 16px;
+        border-radius: 16px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    .exec-banner-left {
+        gap: 11px;
+    }
+    .exec-title {
+        font-size: 17px;
+    }
+    .exec-sub {
+        font-size: 11.5px;
+    }
+    .exec-pill {
+        font-size: 11.5px;
+        padding: 6px 12px;
+        white-space: normal;
+    }
+    .sec-title {
+        font-size: 15.5px;
+    }
+    .kpi-card {
+        padding: 14px 15px;
+        margin-bottom: 8px;
+    }
+    .kpi-main-num {
+        font-size: 22px;
+    }
+    .kpi-val {
+        font-size: 18px;
+    }
+    .kpi-ico {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        font-size: 22px;
+        border-radius: 12px;
+    }
+    .stButton > button, .stDownloadButton > button {
+        width: 100% !important;
+    }
+}
 </style>
 """)
 
@@ -522,15 +698,16 @@ def _safe_dataframe(df: pd.DataFrame, **kwargs):
 
 
 def _make_donut_fig(labels, values, colors, center_text):
-  """Build a styled Plotly donut chart."""
+  """Build a styled Plotly donut chart with crisp slice callouts."""
   fig = go.Figure(
       go.Pie(
           labels=labels,
           values=values,
-          hole=0.58,
-          textinfo="percent",
+          hole=0.60,
+          textinfo="percent+value",
           textposition="inside",
           insidetextorientation="horizontal",
+          pull=[0.03 if i == 0 else 0.0 for i in range(len(labels))],
           marker=dict(
               colors=colors[: len(labels)],
               line=dict(color="#FFFFFF", width=2.5),
@@ -557,6 +734,247 @@ def _make_donut_fig(labels, values, colors, center_text):
       annotations=[dict(text=center_text, x=0.5, y=0.5, font_size=14, showarrow=False)],
   )
   return fig
+
+
+def _extract_size_from_text(series: pd.Series) -> pd.Series:
+  """Extract garment/kids age size label from product title or variant text if explicit Size column is missing."""
+  s = series.fillna("").astype(str)
+  pat = r"(?i)\b(\d{1,2}\s*[-–to]+\s*\d{1,2}\s*(?:yrs?|years?|months?|m)|newborn|free\s*size|xs|s|m|l|xl|xxl)\b"
+  extracted = s.str.extract(pat, expand=False).fillna("").str.strip()
+  return extracted.replace("", "Unspecified")
+
+
+def _render_rto_return_control_section(
+    sku_df: pd.DataFrame,
+    size_df: pd.DataFrame,
+    sku_col_name: str,
+    size_col_name: str,
+    rto_col_name: str,
+    ret_col_name: str,
+    issue_col_name: str,
+    total_ord_col_name: str,
+    start_date: datetime.date,
+    end_date: datetime.date,
+    key_prefix: str,
+):
+  """Render the RTO & Return Control block at the bottom of the returns tab."""
+  _html("""
+    <div class="sec-header-ctrl">
+        <div class="sec-title">🎯 RTO & Return Control: High-Return SKUs & Size / Age-Group Issues</div>
+        <div class="sec-sub">Identify high-return SKUs and size or fit issues to improve upcoming production batches</div>
+    </div>
+    """)
+
+  if sku_df is None or sku_df.empty:
+    st.info("No SKU-level return or RTO data available for the selected period.")
+    return
+
+  sk_work = sku_df.copy()
+  sk_work["RTO_%"] = np.where(
+      sk_work[total_ord_col_name] > 0,
+      (sk_work[rto_col_name] / sk_work[total_ord_col_name] * 100).round(1),
+      0.0,
+  )
+  sk_work["Return_Size_%"] = np.where(
+      sk_work[total_ord_col_name] > 0,
+      (sk_work[ret_col_name] / sk_work[total_ord_col_name] * 100).round(1),
+      0.0,
+  )
+  sk_work["Total_Issue_%"] = np.where(
+      sk_work[total_ord_col_name] > 0,
+      (sk_work[issue_col_name] / sk_work[total_ord_col_name] * 100).round(1),
+      0.0,
+  )
+  sk_work["Production_Action"] = np.where(
+      (sk_work["Return_Size_%"] >= 12.0) & (sk_work[ret_col_name] >= 2),
+      "⚠️ Fit / Size Issue — Review Size Chart & Grading",
+      np.where(
+          (sk_work["RTO_%"] >= 20.0) & (sk_work[rto_col_name] >= 2),
+          "🚨 High RTO — Verify COD & Listing Details",
+          np.where(
+              sk_work[issue_col_name] > 0,
+              "🔍 Monitor Quality & Fit",
+              "✅ Healthy",
+          ),
+      ),
+  )
+  sk_work = sk_work.sort_values(
+      by=[issue_col_name, "Total_Issue_%"], ascending=[False, False]
+  )
+
+  ct_l, ct_r = st.columns([1.25, 1.0])
+  with ct_l:
+    _html(
+        '<div class="card-box"><div class="card-title">🚨 Top 10'
+        " High-Return / RTO SKUs</div>"
+    )
+    top10_sku = sk_work[sk_work[issue_col_name] > 0].head(10).iloc[::-1]
+    if not top10_sku.empty:
+      fig_sku_ret = go.Figure()
+      fig_sku_ret.add_trace(
+          go.Bar(
+              y=top10_sku[sku_col_name].apply(
+                  lambda x: str(x)[:36] + "..." if len(str(x)) > 36 else str(x)
+              ),
+              x=top10_sku[rto_col_name],
+              name="RTO Orders",
+              orientation="h",
+              marker=dict(color="#EF4444", cornerradius=5),
+              text=top10_sku[rto_col_name],
+              textposition="inside",
+          )
+      )
+      fig_sku_ret.add_trace(
+          go.Bar(
+              y=top10_sku[sku_col_name].apply(
+                  lambda x: str(x)[:36] + "..." if len(str(x)) > 36 else str(x)
+              ),
+              x=top10_sku[ret_col_name],
+              name="Return / Exchange Orders",
+              orientation="h",
+              marker=dict(color="#8B5CF6", cornerradius=5),
+              text=top10_sku[ret_col_name],
+              textposition="inside",
+          )
+      )
+      _style_fig(
+          fig_sku_ret,
+          height=350,
+          margins=dict(l=10, r=25, t=28, b=15),
+          hovermode="y unified",
+      )
+      fig_sku_ret.update_layout(barmode="stack")
+      st.plotly_chart(
+          fig_sku_ret, use_container_width=True, key=f"{key_prefix}_sku_ret_ctrl"
+      )
+    else:
+      st.info("No SKU-level RTO or return issues recorded in this period.")
+    _html("</div>")
+
+  with ct_r:
+    _html(
+        '<div class="card-box"><div class="card-title">📏 Size / Age-Group'
+        " Return Rate (%)</div>"
+    )
+    if size_df is not None and not size_df.empty:
+      sz_work = size_df.copy()
+      sz_work["Issue_%"] = np.where(
+          sz_work["Orders"] > 0,
+          (sz_work["Issues"] / sz_work["Orders"] * 100).round(1),
+          0.0,
+      )
+      sz_work = sz_work.sort_values(
+          by=["Issues", "Issue_%"], ascending=[False, False]
+      ).head(10)
+      fig_sz = go.Figure()
+      fig_sz.add_trace(
+          go.Bar(
+              x=sz_work[size_col_name],
+              y=sz_work["Issue_%"],
+              name="Issue Rate %",
+              marker=dict(color="#F59E0B", cornerradius=6),
+              text=[
+                  f"{v:.1f}% ({int(c)})"
+                  for v, c in zip(sz_work["Issue_%"], sz_work["Issues"])
+              ],
+              textposition="outside",
+          )
+      )
+      _style_fig(
+          fig_sz,
+          height=350,
+          margins=dict(l=10, r=10, t=28, b=25),
+          showlegend=False,
+      )
+      fig_sz.update_yaxes(range=[0, max(float(sz_work["Issue_%"].max()) * 1.28, 10.0)])
+      st.plotly_chart(
+          fig_sz, use_container_width=True, key=f"{key_prefix}_size_ret_ctrl"
+      )
+    else:
+      st.info("No size or age-group return breakdown available for this period.")
+    _html("</div>")
+
+  _html(
+      '<div class="card-box"><div class="card-title">📋 SKU-Wise Return &'
+      " Production Action Summary</div>"
+  )
+  _safe_dataframe(
+      sk_work[[
+          sku_col_name,
+          total_ord_col_name,
+          rto_col_name,
+          "RTO_%",
+          ret_col_name,
+          "Return_Size_%",
+          "Total_Issue_%",
+          "Production_Action",
+      ]],
+      use_container_width=True,
+      height=250,
+      hide_index=True,
+  )
+  st.download_button(
+      "⬇️ Download SKU Return & Size Control CSV",
+      sk_work.to_csv(index=False).encode("utf-8"),
+      f"{key_prefix}_sku_return_control_{start_date}_{end_date}.csv",
+      "text/csv",
+      key=f"dl_{key_prefix}_sku_ctrl",
+  )
+  _html("</div>")
+
+
+# ==============================================================================
+# 2B. MONTH-WISE & LATEST/CURRENT DATE HELPERS
+# ==============================================================================
+def _resolve_default_latest_date(
+    min_d: datetime.date, max_d: datetime.date
+) -> datetime.date:
+  """Resolve default selected date to the latest data date or today (whichever fits bounds)."""
+  today_ist = datetime.datetime.now(
+      datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+  ).date()
+  cand = max(max_d, today_ist) if max_d else today_ist
+  return min(max(cand, min_d), max_d)
+
+
+def _sync_refresh_dates(
+    prefix: str,
+    min_d: datetime.date,
+    max_d: datetime.date,
+    default_start: datetime.date,
+    default_end: datetime.date,
+):
+  """Ensure date widgets always default to latest/current dates on fresh load or refresh."""
+  run_token = st.session_state.get("_app_boot_id")
+  if run_token is None:
+    import uuid
+
+    run_token = str(uuid.uuid4())
+    st.session_state["_app_boot_id"] = run_token
+
+  token_key = f"_{prefix}_boot_token"
+  s_key = f"{prefix}_start_date"
+  e_key = f"{prefix}_end_date"
+
+  if st.session_state.get(token_key) != run_token:
+    st.session_state[token_key] = run_token
+    st.session_state[s_key] = min(max(default_start, min_d), max_d)
+    st.session_state[e_key] = min(max(default_end, min_d), max_d)
+  else:
+    if s_key in st.session_state:
+      st.session_state[s_key] = min(max(st.session_state[s_key], min_d), max_d)
+    if e_key in st.session_state:
+      st.session_state[e_key] = min(max(st.session_state[e_key], min_d), max_d)
+
+
+def _month_bounds(ym_str: str, min_d: datetime.date, max_d: datetime.date):
+  """Return clamped (start_date, end_date) for a YYYY-MM month string."""
+  p = pd.Period(ym_str, freq="M")
+  m_start = max(p.start_time.date(), min_d)
+  m_end = min(p.end_time.date(), max_d)
+  if m_start > m_end:
+    m_start = m_end
+  return m_start, m_end
 
 
 # ==============================================================================
@@ -709,22 +1127,42 @@ def load_model_excel(file_source):
   return orders, disp, rev
 
 
-def _read_single_myntra(src):
-  """Read a Myntra consolidated Excel or CSV file."""
+def _read_myntra_sheets(src):
+  """Read Myntra_All_Orders, RTO_Returns, and Exchanges sheets when available."""
   name = (
       src
       if isinstance(src, str)
       else getattr(src, "name", MYNTRA_CONSOLIDATED_NAME)
   )
+  base_nm = os.path.basename(str(name))
   low = str(name).lower()
   if low.endswith(".csv"):
     if hasattr(src, "seek"):
       src.seek(0)
-    return pd.read_csv(src, low_memory=False), os.path.basename(str(name))
-  return (
-      _read_excel_or_html_table(src, preferred_sheet="Myntra_All_Orders"),
-      os.path.basename(str(name)),
-  )
+    df_all = pd.read_csv(src, low_memory=False)
+    return df_all, pd.DataFrame(), pd.DataFrame(), base_nm
+
+  if hasattr(src, "seek"):
+    src.seek(0)
+  try:
+    xls = pd.ExcelFile(src)
+    sheets = xls.sheet_names
+    main_sh = "Myntra_All_Orders" if "Myntra_All_Orders" in sheets else sheets[0]
+    df_all = pd.read_excel(xls, sheet_name=main_sh)
+    df_rto = (
+        pd.read_excel(xls, sheet_name="RTO_Returns")
+        if "RTO_Returns" in sheets
+        else pd.DataFrame()
+    )
+    df_ex = (
+        pd.read_excel(xls, sheet_name="Exchanges")
+        if "Exchanges" in sheets
+        else pd.DataFrame()
+    )
+    return df_all, df_rto, df_ex, base_nm
+  except Exception:
+    df_all = _read_excel_or_html_table(src, preferred_sheet="Myntra_All_Orders")
+    return df_all, pd.DataFrame(), pd.DataFrame(), base_nm
 
 
 def _build_combined_status(s_val, r_val):
@@ -748,37 +1186,72 @@ def _build_combined_status(s_val, r_val):
 
 @st.cache_data(show_spinner=False)
 def load_myntra_data(source):
-  """Load and normalize Myntra order data."""
+  """Load and normalize Myntra order data following Myntra_All_Orders, RTO_Returns, and Exchanges sheets."""
   if source is None:
     return pd.DataFrame(), []
-  tmp, nm = _read_single_myntra(source)
-  df = tmp.drop_duplicates().copy()
+  tmp, rto_sh, ex_sh, nm = _read_myntra_sheets(source)
+  meta_ignore = [
+      c for c in ["_source_file", "_part_tag", "order_date_dt"] if c in tmp.columns
+  ]
+  biz_cols = [c for c in tmp.columns if c not in meta_ignore]
+  df = tmp.drop_duplicates(
+      subset=biz_cols if biz_cols else None, keep="last"
+  ).copy()
+  if "item_id" in df.columns and df["item_id"].notna().any():
+    df = df.drop_duplicates(subset=["item_id"], keep="last").copy()
 
+  rto_item_ids = (
+      set(rto_sh["item_id"].dropna().astype(str).str.strip())
+      if (not rto_sh.empty and "item_id" in rto_sh.columns)
+      else set()
+  )
+  ex_item_ids = (
+      set(ex_sh["item_id"].dropna().astype(str).str.strip())
+      if (not ex_sh.empty and "item_id" in ex_sh.columns)
+      else set()
+  )
+  item_s = (
+      df["item_id"].astype(str).str.strip()
+      if "item_id" in df.columns
+      else pd.Series([""] * len(df), index=df.index)
+  )
+  df["_in_rto_returns_sheet"] = item_s.isin(rto_item_ids)
+  df["_in_exchanges_sheet"] = item_s.isin(ex_item_ids)
+
+  ord_dt_existing = _find_col(df, ["order_date_dt"])
   ord_dt_col = _find_col(
       df, ["order_date", "Order Date", "order_created_date"]
   )
   pack_dt_col = _find_col(df, ["packing_date", "Packing Date", "packed_date"])
 
-  df["order_date_dt"] = pd.to_datetime(
-      df[ord_dt_col] if ord_dt_col else pd.Series(dtype=str),
-      format="mixed",
-      dayfirst=True,
-      errors="coerce",
+  parsed_from_raw = (
+      pd.to_datetime(df[ord_dt_col], format="mixed", errors="coerce")
+      if ord_dt_col
+      else pd.Series(pd.NaT, index=df.index)
   )
-  if (
-      hasattr(df["order_date_dt"].dt, "tz")
-      and df["order_date_dt"].dt.tz is not None
-  ):
-    df["order_date_dt"] = (
-        df["order_date_dt"].dt.tz_convert("Asia/Kolkata").dt.tz_localize(None)
+  if hasattr(parsed_from_raw.dt, "tz") and parsed_from_raw.dt.tz is not None:
+    parsed_from_raw = parsed_from_raw.dt.tz_convert(
+        "Asia/Kolkata"
+    ).dt.tz_localize(None)
+
+  if ord_dt_existing:
+    parsed_existing = pd.to_datetime(
+        df[ord_dt_existing], format="mixed", errors="coerce"
     )
+    if hasattr(parsed_existing.dt, "tz") and parsed_existing.dt.tz is not None:
+      parsed_existing = parsed_existing.dt.tz_convert(
+          "Asia/Kolkata"
+      ).dt.tz_localize(None)
+    df["order_date_dt"] = parsed_existing.fillna(parsed_from_raw)
+  else:
+    df["order_date_dt"] = parsed_from_raw
+
   df["Order_Create_Date"] = df["order_date_dt"].dt.date
 
-  df["packing_date_dt"] = pd.to_datetime(
-      df[pack_dt_col] if pack_dt_col else pd.Series(dtype=str),
-      format="mixed",
-      dayfirst=True,
-      errors="coerce",
+  df["packing_date_dt"] = (
+      pd.to_datetime(df[pack_dt_col], format="mixed", errors="coerce")
+      if pack_dt_col
+      else pd.Series(pd.NaT, index=df.index)
   )
   if (
       hasattr(df["packing_date_dt"].dt, "tz")
@@ -860,6 +1333,9 @@ def load_myntra_data(source):
   sku_col = _find_col(
       df, ["product_sku_code", "Product SKU Code", "sku_code", "sku"]
   )
+  size_col = _find_col(
+      df, ["size", "Size", "product_size", "variant_size", "age_group"]
+  )
 
   df["Article_Clean"] = (
       df[art_col].fillna("Unknown").astype(str).str.strip().replace("", "Unknown")
@@ -871,6 +1347,16 @@ def load_myntra_data(source):
       if sku_col
       else pd.Series(["Unknown"] * len(df))
   )
+  if size_col:
+    df["Size_Clean"] = (
+        df[size_col]
+        .fillna("Unspecified")
+        .astype(str)
+        .str.strip()
+        .replace("", "Unspecified")
+    )
+  else:
+    df["Size_Clean"] = _extract_size_from_text(df["SKU_Clean"])
   return df, [nm]
 
 
@@ -942,6 +1428,8 @@ def load_nykaa_data(file_src):
 
   skuc_col = _find_col(df, ["SKU Code", "sku_code", "SKU"])
   skun_col = _find_col(df, ["SKU Name", "sku_name", "Product Name"])
+  size_col = _find_col(df, ["Size", "size", "Variant", "Age Group"])
+
   df["SKU_Code_Clean"] = (
       df[skuc_col].fillna("Unknown").astype(str).str.strip()
       if skuc_col
@@ -952,7 +1440,220 @@ def load_nykaa_data(file_src):
       if skun_col
       else pd.Series(["Unknown"] * len(df))
   )
+  if size_col:
+    df["Size_Clean"] = (
+        df[size_col]
+        .fillna("Unspecified")
+        .astype(str)
+        .str.strip()
+        .replace("", "Unspecified")
+    )
+  else:
+    df["Size_Clean"] = _extract_size_from_text(
+        df["SKU_Name_Clean"] + " " + df["SKU_Code_Clean"]
+    )
   return df
+
+
+# ==============================================================================
+# 4B. CUSTOMER COHORT MATRIX BUILDER (INFORMATIVE BOTTOM SECTION)
+# ==============================================================================
+def _detect_customer_key(df: pd.DataFrame):
+  """Detect the best customer identifier column in orders data."""
+  cust_col = _find_col(
+      df,
+      [
+          "Customer_ID",
+          "Customer Id",
+          "Customer_Email",
+          "Email",
+          "Customer_Phone",
+          "Phone",
+          "Customer_Name",
+          "Customer Name",
+      ],
+  )
+  if not cust_col:
+    return None
+  s = df[cust_col].fillna("").astype(str).str.strip()
+  s = s[~s.str.lower().isin(["", "nan", "none", "guest", "unknown"])]
+  if s.empty:
+    return None
+  return cust_col
+
+
+def _render_customer_cohort_matrix(orders_df: pd.DataFrame, max_months: int = 8):
+  """Render a detailed Customer Cohort Analysis matrix with cohort size & retention insights."""
+  _html(
+      '<div class="card-box"><div class="card-title">📊 Customer Cohort'
+      " Retention Analysis (Month-by-Month Repeat Activity)</div>"
+  )
+
+  if orders_df is None or orders_df.empty or "_dt" not in orders_df.columns:
+    st.info("No order history available to compute customer cohorts.")
+    _html("</div>")
+    return
+
+  cust_col = _detect_customer_key(orders_df)
+  if not cust_col:
+    st.info(
+        "Customer identifier column (Customer_Email / Customer_ID /"
+        " Customer_Name) not found in orders sheet."
+    )
+    _html("</div>")
+    return
+
+  cdf = orders_df.dropna(subset=["_dt"]).copy()
+  cdf["_cust"] = cdf[cust_col].fillna("").astype(str).str.strip()
+  cdf = cdf[~cdf["_cust"].str.lower().isin(["", "nan", "none", "guest", "unknown"])].copy()
+  if cdf.empty:
+    st.info("No valid customer records found for cohort analysis.")
+    _html("</div>")
+    return
+
+  cdf["_order_ym"] = cdf["_dt"].dt.to_period("M")
+  first_ym_map = cdf.groupby("_cust")["_order_ym"].min()
+  cdf["_cohort_ym"] = cdf["_cust"].map(first_ym_map)
+  cdf["_month_idx"] = (
+      cdf["_order_ym"].dt.year - cdf["_cohort_ym"].dt.year
+  ) * 12 + (cdf["_order_ym"].dt.month - cdf["_cohort_ym"].dt.month)
+  cdf = cdf[cdf["_month_idx"] >= 0].copy()
+
+  cohort_sizes = cdf.groupby("_cohort_ym")["_cust"].nunique()
+  if cohort_sizes.empty:
+    st.info("No cohort sizes available.")
+    _html("</div>")
+    return
+
+  max_m_data = int(cdf["_month_idx"].max())
+  num_cols = min(max_months, max(1, max_m_data + 1))
+  month_cols = [f"Month {i}" for i in range(num_cols)]
+
+  active_by_cm = (
+      cdf[cdf["_month_idx"] < num_cols]
+      .groupby(["_cohort_ym", "_month_idx"])["_cust"]
+      .nunique()
+      .unstack(fill_value=0)
+  )
+
+  pct_matrix = pd.DataFrame(
+      index=cohort_sizes.index, columns=range(num_cols), dtype=float
+  )
+  cnt_matrix = pd.DataFrame(
+      index=cohort_sizes.index, columns=range(num_cols), dtype=float
+  )
+  for c_ym, c_size in cohort_sizes.items():
+    if c_size <= 0:
+      continue
+    for m_i in range(num_cols):
+      if m_i in active_by_cm.columns and c_ym in active_by_cm.index:
+        act_cnt = float(active_by_cm.loc[c_ym, m_i])
+        if m_i == 0 or act_cnt > 0:
+          cnt_matrix.loc[c_ym, m_i] = act_cnt
+          pct_matrix.loc[c_ym, m_i] = (act_cnt / float(c_size)) * 100.0
+
+  all_cohorts_row = {}
+  for m_i in range(num_cols):
+    col_vals = pct_matrix[m_i].dropna()
+    all_cohorts_row[m_i] = float(col_vals.mean()) if not col_vals.empty else np.nan
+
+  def _fmt_pct(val):
+    if pd.isna(val):
+      return ""
+    rounded = round(float(val), 2)
+    if float(rounded).is_integer():
+      return f"{int(rounded)}%"
+    s = f"{rounded:.2f}".rstrip("0").rstrip(".")
+    return f"{s}%"
+
+  def _cell_style(val, max_v):
+    if pd.isna(val) or max_v <= 0:
+      return "background: transparent; color: transparent;"
+    ratio = float(np.clip(val / max_v, 0.0, 1.0))
+    r = int(round(220 + ratio * (15 - 220)))
+    g = int(round(228 + ratio * (47 - 228)))
+    b = int(round(250 + ratio * (158 - 250)))
+    txt_color = "#FFFFFF" if ratio >= 0.62 else "#0F172A"
+    return f"background-color: rgb({r},{g},{b}); color: {txt_color}; font-weight: 600;"
+
+  max_cell_val = float(pct_matrix.max().max()) if not pct_matrix.empty else 1.0
+  if pd.isna(max_cell_val) or max_cell_val <= 0:
+    max_cell_val = 1.0
+
+  th_cells = [
+      '<th style="text-align:left; padding:10px 14px; color:#334155;'
+      ' font-weight:700; font-size:13px; border-bottom:1px solid'
+      ' #E2E8F0;">Cohort (Users)</th>'
+  ]
+  for mc in month_cols:
+    th_cells.append(
+        f'<th style="text-align:center; padding:10px 10px; color:#334155; font-weight:600; font-size:13px; border-bottom:1px solid #E2E8F0;">{mc}</th>'
+    )
+
+  all_cells = [
+      '<td style="text-align:left; padding:12px 14px; font-weight:800;'
+      ' color:#0F172A; font-size:13px; border-bottom:1px solid'
+      ' #E2E8F0;">All cohorts</td>'
+  ]
+  for m_i in range(num_cols):
+    v = all_cohorts_row.get(m_i, np.nan)
+    lbl = _fmt_pct(v)
+    all_cells.append(
+        f'<td style="text-align:center; padding:12px 10px; font-weight:800; color:#0F172A; font-size:13px; border-bottom:1px solid #E2E8F0;">{lbl}</td>'
+    )
+
+  body_rows_html = []
+  m1_rates = []
+  for c_ym in sorted(pct_matrix.index):
+    c_lbl = c_ym.strftime("%b %Y")
+    c_sz = int(cohort_sizes.get(c_ym, 0))
+    if 1 in pct_matrix.columns and not pd.isna(pct_matrix.loc[c_ym, 1]):
+      m1_rates.append(float(pct_matrix.loc[c_ym, 1]))
+    tds = [
+        f'<td style="text-align:left; padding:6px 14px; color:#1E293B; font-size:13px; white-space:nowrap;"><b>{c_lbl}</b> <span style="color:#64748B; font-size:11.5px;">({c_sz:,})</span></td>'
+    ]
+    for m_i in range(num_cols):
+      val = pct_matrix.loc[c_ym, m_i]
+      act_u = (
+          cnt_matrix.loc[c_ym, m_i]
+          if not pd.isna(cnt_matrix.loc[c_ym, m_i])
+          else 0.0
+      )
+      if pd.isna(val):
+        tds.append('<td style="padding:4px; text-align:center;"></td>')
+      else:
+        st_css = _cell_style(val, max_cell_val)
+        lbl = _fmt_pct(val)
+        tip = (
+            f"{c_lbl} | Month {m_i}: {lbl} ({int(act_u):,}/{c_sz:,} customers)"
+        )
+        tds.append(
+            f'<td style="padding:3px; text-align:center;" title="{tip}">'
+            f'<div style="{st_css} border-radius:6px; padding:10px 8px; font-size:12.5px; min-width:74px;">{lbl}</div>'
+            "</td>"
+        )
+    body_rows_html.append("<tr>" + "".join(tds) + "</tr>")
+
+  table_html = (
+      '<div style="overflow-x:auto; width:100%;">'
+      '<table style="width:100%; border-collapse:separate; border-spacing:2px'
+      ' 4px; font-family:Plus Jakarta Sans,sans-serif;">'
+      f'<thead><tr>{"".join(th_cells)}</tr></thead>'
+      f'<tbody><tr>{"".join(all_cells)}</tr>{"".join(body_rows_html)}</tbody>'
+      "</table></div>"
+  )
+  _html(table_html)
+
+  avg_m1 = f"{np.mean(m1_rates):.1f}%" if m1_rates else "N/A"
+  largest_c_ym = cohort_sizes.idxmax()
+  _html(f"""
+    <div class="viz-info">
+        <b>Cohort Intelligence:</b> Tracked <b>{len(cohort_sizes):,}</b> monthly cohorts (Total first-time customers: <b>{int(cohort_sizes.sum()):,}</b>) ·
+        Largest cohort: <b>{largest_c_ym.strftime('%b %Y')} ({int(cohort_sizes.max()):,} users)</b> ·
+        Avg Month 1 repeat retention: <b>{avg_m1}</b>. Hover any cell for exact active customer counts.
+    </div>
+    """)
+  _html("</div>")
 
 
 # ==============================================================================
@@ -961,6 +1662,7 @@ def load_nykaa_data(file_src):
 DASHBOARD_PAGES = [
     "📊 Daily Analysis",
     "👗 Shopify Analysis",
+    "🔮 Shopify Forecast",
     "🛍️ Myntra Analysis",
     "💄 Nykaa Analysis",
 ]
@@ -1068,7 +1770,7 @@ with top_nav2:
 
 
 # ==============================================================================
-# 6. PAGE 1: DAILY ANALYSIS
+# 6. PAGE 1: DAILY ANALYSIS (WITH DAILY RTO STATUS & EXCHANGE STATUS + EXCEL)
 # ==============================================================================
 def render_daily_page():
   if model_src is None:
@@ -1086,15 +1788,17 @@ def render_daily_page():
 
   min_d = valid_dates.min().date()
   max_d = valid_dates.max().date()
-  default_target = datetime.date(2026, 11, 22)
-  init_date = default_target if min_d <= default_target <= max_d else max_d
+  init_date = _resolve_default_latest_date(min_d, max_d)
+  if "_daily_boot_seen" not in st.session_state:
+    st.session_state["_daily_boot_seen"] = True
+    st.session_state["arth_daily_date"] = init_date
 
   b1, b2 = st.columns([1.8, 1.0])
   with b1:
     _html("""
         <div class="main-banner">
             <div class="main-h1">Arth life Daily Analysis</div>
-            <div class="main-sub">Particular Date KPIs + Automatic Rolling 7-Day Section-wise Analysis</div>
+            <div class="main-sub">Particular Date KPIs + Rolling 7-Day Trend, Daily RTO Status & Daily Exchange Status</div>
         </div>
         """)
   with b2:
@@ -1108,6 +1812,7 @@ def render_daily_page():
 
   start_7d = selected_date - datetime.timedelta(days=6)
   dates_7d = [start_7d + datetime.timedelta(days=i) for i in range(7)]
+  date_lbls_7d = [d.strftime("%d %b") for d in dates_7d]
   prev_date = selected_date - datetime.timedelta(days=1)
 
   f_orders = df_orders.copy()
@@ -1133,13 +1838,22 @@ def render_daily_page():
     f_rev = df_rev[
         df_rev["Base_Order_ID"].isin(set(f_orders["Base_Order_ID"]))
     ].copy()
-    f_rev["_rev_d"] = (
-        f_rev["Pickup_Date_dt"].dt.date
-        if "Pickup_Date_dt" in f_rev.columns
-        else pd.NaT
-    )
+    if "Pickup_Date_dt" in f_rev.columns and f_rev["Pickup_Date_dt"].notna().any():
+      f_rev["_rev_d"] = f_rev["Pickup_Date_dt"].dt.date
+    else:
+      ord_date_map = (
+          f_orders.dropna(subset=["_ord_d"])
+          .drop_duplicates("Base_Order_ID")
+          .set_index("Base_Order_ID")["_ord_d"]
+      )
+      f_rev["_rev_d"] = f_rev["Base_Order_ID"].map(ord_date_map)
   else:
     f_rev = pd.DataFrame(columns=["Base_Order_ID", "_rev_d"])
+  f_rev_id_col = (
+      _find_col(f_rev, ["Order_ID", "Base_Order_ID"])
+      if not f_rev.empty
+      else None
+  )
 
   latest_ym_val = f_orders[f_orders["_ord_d"] <= selected_date]["_ym"].dropna().max()
   if pd.isna(latest_ym_val) or not latest_ym_val:
@@ -1318,8 +2032,8 @@ def render_daily_page():
         f_disp[(f_disp["_disp_d"] == d_k) & rto_mask]["Base_Order_ID"].nunique()
     )
     ex_k = (
-        int(f_rev[f_rev["_rev_d"] == d_k]["Base_Order_ID"].nunique())
-        if (not f_rev.empty and "_rev_d" in f_rev.columns)
+        int(f_rev[f_rev["_rev_d"] == d_k][f_rev_id_col].nunique())
+        if (not f_rev.empty and "_rev_d" in f_rev.columns and f_rev_id_col)
         else 0
     )
 
@@ -1341,26 +2055,48 @@ def render_daily_page():
     })
   df_7d = pd.DataFrame(rows_7d)
 
-  def _spark(x_labels, y_vals, line_color="#4F46E5"):
+  def _spark(
+      x_labels, y_vals, line_color="#4F46E5", fill_rgba="rgba(79, 70, 229, 0.08)"
+  ):
+    y_arr = np.asarray(y_vals, dtype=float)
+    y_min = float(np.min(y_arr)) if len(y_arr) else 0.0
+    y_max = float(np.max(y_arr)) if len(y_arr) else 1.0
+    span = max(y_max - y_min, 1.0)
+    pad_low = max(0.0, y_min - span * 0.25)
+    pad_high = y_max + span * 0.30
+
     fig = go.Figure(
         go.Scatter(
-            x=x_labels,
-            y=y_vals,
+            x=list(range(len(x_labels))),
+            y=y_arr,
             mode="lines+markers",
-            line=dict(color=line_color, width=2.3, shape="spline"),
-            marker=dict(size=5, color=line_color),
-            text=[str(v) for v in y_vals],
-            hovertemplate="%{x}: <b>%{text}</b><extra></extra>",
+            fill="tozeroy",
+            fillcolor=fill_rgba,
+            line=dict(color=line_color, width=2.2, shape="spline"),
+            marker=dict(
+                size=5, color="#FFFFFF", line=dict(color=line_color, width=1.8)
+            ),
+            customdata=list(x_labels),
+            text=[f"{int(v):,}" for v in y_arr],
+            hovertemplate="%{customdata}: <b>%{text}</b><extra></extra>",
         )
     )
     fig.update_layout(
-        height=42,
-        margin=dict(l=4, r=4, t=4, b=2),
+        height=46,
+        margin=dict(l=10, r=10, t=6, b=6),
         paper_bgcolor="#FFFFFF",
         plot_bgcolor="#FFFFFF",
         showlegend=False,
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False),
+        xaxis=dict(
+            visible=False,
+            range=[-0.4, max(len(x_labels) - 0.6, 0.6)],
+            fixedrange=True,
+        ),
+        yaxis=dict(
+            visible=False,
+            range=[pad_low, pad_high],
+            fixedrange=True,
+        ),
     )
     return fig
 
@@ -1384,7 +2120,9 @@ def render_daily_page():
         </div>
         """)
     st.plotly_chart(
-        _spark(df_7d["Date"], df_7d["Orders"], "#4F46E5"),
+        _spark(
+            df_7d["Date"], df_7d["Orders"], "#4F46E5", "rgba(79, 70, 229, 0.08)"
+        ),
         use_container_width=True,
     )
 
@@ -1397,7 +2135,12 @@ def render_daily_page():
         </div>
         """)
     st.plotly_chart(
-        _spark(df_7d["Date"], df_7d["Unfulfilled"], "#E11D48"),
+        _spark(
+            df_7d["Date"],
+            df_7d["Unfulfilled"],
+            "#E11D48",
+            "rgba(225, 29, 72, 0.08)",
+        ),
         use_container_width=True,
     )
 
@@ -1411,7 +2154,12 @@ def render_daily_page():
         </div>
         """)
     st.plotly_chart(
-        _spark(df_7d["Date"], df_7d["Fulfilled"], "#7C3AED"),
+        _spark(
+            df_7d["Date"],
+            df_7d["Fulfilled"],
+            "#7C3AED",
+            "rgba(124, 58, 237, 0.08)",
+        ),
         use_container_width=True,
     )
 
@@ -1424,7 +2172,12 @@ def render_daily_page():
         </div>
         """)
     st.plotly_chart(
-        _spark(df_7d["Date"], df_7d["Unfulfilled"], "#F59E0B"),
+        _spark(
+            df_7d["Date"],
+            df_7d["Unfulfilled"],
+            "#F59E0B",
+            "rgba(245, 158, 11, 0.08)",
+        ),
         use_container_width=True,
     )
 
@@ -1457,7 +2210,7 @@ def render_daily_page():
             x=df_7d["Date"],
             y=df_7d["Prepaid"],
             name="Prepaid Orders",
-            marker=dict(color="#4F46E5", cornerradius=4),
+            marker=dict(color="#4F46E5", cornerradius=5),
             text=df_7d["Prepaid"],
             textposition="inside",
             textfont=dict(color="#FFFFFF", size=10.5),
@@ -1468,7 +2221,7 @@ def render_daily_page():
             x=df_7d["Date"],
             y=df_7d["COD"],
             name="COD Orders",
-            marker=dict(color="#06B6D4", cornerradius=4),
+            marker=dict(color="#06B6D4", cornerradius=5),
             text=df_7d["COD"],
             textposition="inside",
             textfont=dict(color="#0F172A", size=10.5),
@@ -1479,28 +2232,19 @@ def render_daily_page():
             x=df_7d["Date"],
             y=df_7d["Orders"],
             name="Total Orders",
-            mode="lines+text",
-            line=dict(color="rgba(0,0,0,0)"),
+            mode="lines+markers+text",
+            line=dict(color="#1E1B4B", width=1.8, dash="dot"),
+            marker=dict(size=6, color="#1E1B4B"),
             text=[f"<b>{v}</b>" for v in df_7d["Orders"]],
             textposition="top center",
             textfont=dict(size=11.5, color="#1E1B4B"),
         )
     )
-    fig_oc.update_layout(
-        barmode="stack",
-        height=270,
-        margin=dict(l=8, r=8, t=26, b=5),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        yaxis=dict(
-            range=[0, max(df_7d["Orders"].max(), 1) * 1.28],
-            showgrid=True,
-            gridcolor="#F1F5F9",
-        ),
-        legend=dict(
-            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
-        ),
+    _style_fig(
+        fig_oc, height=275, margins=dict(l=8, r=8, t=28, b=6), hovermode="x unified"
     )
+    fig_oc.update_layout(barmode="stack")
+    fig_oc.update_yaxes(range=[0, max(df_7d["Orders"].max(), 1) * 1.32])
     st.plotly_chart(fig_oc, use_container_width=True)
     _html(
         f'<div class="viz-info"><b>7D Orders:</b> Total <b>{tot_7d_ord:,}</b>'
@@ -1519,7 +2263,8 @@ def render_daily_page():
             x=df_7d["Date"],
             y=df_7d["Revenue"],
             name="Revenue (₹)",
-            marker=dict(color="#6366F1", cornerradius=5),
+            marker=dict(color="#6366F1", cornerradius=6),
+            opacity=0.88,
             text=[f"₹{v/1000:.1f}k" for v in df_7d["Revenue"]],
             textposition="outside",
             textfont=dict(size=10, color="#312E81"),
@@ -1532,28 +2277,24 @@ def render_daily_page():
             y=df_7d["AOV"],
             name="AOV (₹)",
             mode="lines+markers",
-            line=dict(color="#F59E0B", width=2.5, shape="spline"),
-            marker=dict(size=7, color="#F59E0B"),
+            line=dict(color="#F59E0B", width=2.8, shape="spline"),
+            marker=dict(
+                size=7.5, color="#FFFFFF", line=dict(color="#F59E0B", width=2.2)
+            ),
         ),
         secondary_y=True,
     )
-    fig_rev.update_layout(
-        height=240,
-        margin=dict(l=8, r=8, t=24, b=5),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        legend=dict(
-            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
-        ),
+    _style_fig(
+        fig_rev,
+        height=245,
+        margins=dict(l=8, r=8, t=26, b=6),
+        hovermode="x unified",
     )
     fig_rev.update_yaxes(
-        range=[0, max(df_7d["Revenue"].max(), 1) * 1.28],
-        showgrid=True,
-        gridcolor="#F1F5F9",
-        secondary_y=False,
+        range=[0, max(df_7d["Revenue"].max(), 1) * 1.30], secondary_y=False
     )
     fig_rev.update_yaxes(
-        range=[0, max(df_7d["AOV"].max(), 1) * 1.35],
+        range=[0, max(df_7d["AOV"].max(), 1) * 1.38],
         showgrid=False,
         secondary_y=True,
     )
@@ -1573,7 +2314,12 @@ def render_daily_page():
         </div>
         """)
     st.plotly_chart(
-        _spark(df_7d["Date"], df_7d["Dispatched"], "#10B981"),
+        _spark(
+            df_7d["Date"],
+            df_7d["Dispatched"],
+            "#10B981",
+            "rgba(16, 185, 129, 0.08)",
+        ),
         use_container_width=True,
     )
 
@@ -1585,23 +2331,20 @@ def render_daily_page():
         go.Bar(
             x=df_7d["Date"],
             y=df_7d["Dispatched"],
-            marker=dict(color="#10B981", cornerradius=5),
+            name="Dispatched",
+            marker=dict(color="#10B981", cornerradius=6),
             text=[f"<b>{v}</b>" for v in df_7d["Dispatched"]],
             textposition="outside",
             textfont=dict(color="#065F46", size=11),
         )
     )
-    fig_dp.update_layout(
-        height=230,
-        margin=dict(l=8, r=8, t=24, b=5),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        yaxis=dict(
-            range=[0, max(df_7d["Dispatched"].max(), 1) * 1.28],
-            showgrid=True,
-            gridcolor="#F1F5F9",
-        ),
+    _style_fig(
+        fig_dp,
+        height=235,
+        margins=dict(l=8, r=8, t=26, b=6),
+        showlegend=False,
     )
+    fig_dp.update_yaxes(range=[0, max(df_7d["Dispatched"].max(), 1) * 1.30])
     st.plotly_chart(fig_dp, use_container_width=True)
     _html(
         f'<div class="viz-info"><b>Dispatch Summary:</b> Total'
@@ -1620,7 +2363,7 @@ def render_daily_page():
             x=df_7d["Date"],
             y=df_7d["Delhivery"],
             name="Delhivery",
-            marker=dict(color="#0EA5E9", cornerradius=4),
+            marker=dict(color="#0EA5E9", cornerradius=5),
             text=df_7d["Delhivery"],
             textposition="inside",
         )
@@ -1630,22 +2373,18 @@ def render_daily_page():
             x=df_7d["Date"],
             y=df_7d["DTDC"],
             name="DTDC",
-            marker=dict(color="#8B5CF6", cornerradius=4),
+            marker=dict(color="#8B5CF6", cornerradius=5),
             text=df_7d["DTDC"],
             textposition="inside",
         )
     )
-    fig_car.update_layout(
-        barmode="stack",
+    _style_fig(
+        fig_car,
         height=215,
-        margin=dict(l=8, r=8, t=22, b=5),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        yaxis=dict(showgrid=True, gridcolor="#F1F5F9"),
-        legend=dict(
-            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
-        ),
+        margins=dict(l=8, r=8, t=24, b=6),
+        hovermode="x unified",
     )
+    fig_car.update_layout(barmode="stack")
     st.plotly_chart(fig_car, use_container_width=True)
     _html(
         f'<div class="viz-info"><b>7D Carrier Parcels:</b> Delhivery:'
@@ -1667,23 +2406,19 @@ def render_daily_page():
         go.Bar(
             x=df_7d["Date"],
             y=df_7d["Undispatched"],
-            marker=dict(color="#F43F5E", cornerradius=5),
+            marker=dict(color="#F43F5E", cornerradius=6),
             text=[f"<b>{v}</b>" for v in df_7d["Undispatched"]],
             textposition="outside",
             textfont=dict(color="#9F1239", size=10.5),
         )
     )
-    fig_bl.update_layout(
+    _style_fig(
+        fig_bl,
         height=210,
-        margin=dict(l=5, r=5, t=22, b=5),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        yaxis=dict(
-            range=[0, max(df_7d["Undispatched"].max(), 1) * 1.32],
-            showgrid=True,
-            gridcolor="#F1F5F9",
-        ),
+        margins=dict(l=6, r=6, t=24, b=6),
+        showlegend=False,
     )
+    fig_bl.update_yaxes(range=[0, max(df_7d["Undispatched"].max(), 1) * 1.34])
     st.plotly_chart(fig_bl, use_container_width=True)
     _html(
         f'<div class="viz-info"><b>Total Undispatched (7D):</b>'
@@ -1701,27 +2436,23 @@ def render_daily_page():
             y=df_7d["Fulfilled"],
             mode="lines+markers+text",
             fill="tozeroy",
-            fillcolor="rgba(139, 92, 246, 0.16)",
-            line=dict(color="#7C3AED", width=2.5, shape="spline"),
+            fillcolor="rgba(124, 58, 237, 0.16)",
+            line=dict(color="#7C3AED", width=2.8, shape="spline"),
             marker=dict(
-                size=6, color="#FFFFFF", line=dict(color="#7C3AED", width=2)
+                size=7, color="#FFFFFF", line=dict(color="#7C3AED", width=2.2)
             ),
             text=[f"<b>{v}</b>" for v in df_7d["Fulfilled"]],
             textposition="top center",
             textfont=dict(color="#5B21B6", size=10.5),
         )
     )
-    fig_fl.update_layout(
+    _style_fig(
+        fig_fl,
         height=210,
-        margin=dict(l=5, r=5, t=22, b=5),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        yaxis=dict(
-            range=[0, max(df_7d["Fulfilled"].max(), 1) * 1.35],
-            showgrid=True,
-            gridcolor="#F1F5F9",
-        ),
+        margins=dict(l=6, r=6, t=24, b=6),
+        showlegend=False,
     )
+    fig_fl.update_yaxes(range=[0, max(df_7d["Fulfilled"].max(), 1) * 1.36])
     st.plotly_chart(fig_fl, use_container_width=True)
     _html(
         f'<div class="viz-info"><b>Total Fulfilled:</b>'
@@ -1734,23 +2465,19 @@ def render_daily_page():
         go.Bar(
             x=df_7d["Date"],
             y=df_7d["RTO"],
-            marker=dict(color="#EF4444", cornerradius=5),
+            marker=dict(color="#EF4444", cornerradius=6),
             text=[f"<b>{v}</b>" for v in df_7d["RTO"]],
             textposition="outside",
             textfont=dict(color="#991B1B", size=10.5),
         )
     )
-    fig_rto.update_layout(
+    _style_fig(
+        fig_rto,
         height=210,
-        margin=dict(l=5, r=5, t=22, b=5),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        yaxis=dict(
-            range=[0, max(df_7d["RTO"].max(), 1) * 1.35],
-            showgrid=True,
-            gridcolor="#F1F5F9",
-        ),
+        margins=dict(l=6, r=6, t=24, b=6),
+        showlegend=False,
     )
+    fig_rto.update_yaxes(range=[0, max(df_7d["RTO"].max(), 1) * 1.36])
     st.plotly_chart(fig_rto, use_container_width=True)
     _html(
         f'<div class="viz-info"><b>7D RTO Count:</b>'
@@ -1766,28 +2493,293 @@ def render_daily_page():
         go.Bar(
             x=df_7d["Date"],
             y=df_7d["Exchange"],
-            marker=dict(color="#8B5CF6", cornerradius=5),
+            marker=dict(color="#8B5CF6", cornerradius=6),
             text=[f"<b>{v}</b>" for v in df_7d["Exchange"]],
             textposition="outside",
             textfont=dict(color="#5B21B6", size=10.5),
         )
     )
-    fig_ex.update_layout(
+    _style_fig(
+        fig_ex,
         height=210,
-        margin=dict(l=5, r=5, t=22, b=5),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        yaxis=dict(
-            range=[0, max(df_7d["Exchange"].max(), 1) * 1.35],
-            showgrid=True,
-            gridcolor="#F1F5F9",
-        ),
+        margins=dict(l=6, r=6, t=24, b=6),
+        showlegend=False,
     )
+    fig_ex.update_yaxes(range=[0, max(df_7d["Exchange"].max(), 1) * 1.36])
     st.plotly_chart(fig_ex, use_container_width=True)
     _html(
         f'<div class="viz-info"><b>7D Exchange Pickups:</b>'
         f" <b>{tot_7d_ex:,}</b></div></div>"
     )
+
+  # --------------------------------------------------------------------------
+  # Section 2B — Daily RTO Status & Daily Exchange Status (Chart + Full Excel)
+  # --------------------------------------------------------------------------
+  _html(
+      '<div class="sec-bar">Section 2B — Daily RTO Status & Daily Exchange'
+      " Status (7 Days + Full Data Excel)</div>"
+  )
+  s2b_l, s2b_r = st.columns(2)
+  status_palette = [
+      "#EF4444",
+      "#F97316",
+      "#F59E0B",
+      "#8B5CF6",
+      "#0EA5E9",
+      "#10B981",
+      "#EC4899",
+      "#64748B",
+  ]
+
+  with s2b_l:
+    _html(
+        '<div class="viz-card"><div class="viz-heading">🚚 Daily RTO Status'
+        " Breakdown (7 Days)</div>"
+    )
+    rto_7d_df = f_disp[f_disp["_disp_d"].isin(dates_7d) & rto_mask].copy()
+    st_col_d = (
+        _find_col(rto_7d_df, ["Shipment_Status", "Status"])
+        if not rto_7d_df.empty
+        else None
+    )
+    if not rto_7d_df.empty:
+      rto_7d_df["_rto_st"] = (
+          rto_7d_df[st_col_d]
+          .fillna("RTO")
+          .astype(str)
+          .str.strip()
+          .replace("", "RTO")
+          if st_col_d
+          else "RTO"
+      )
+      rto_st_piv = pd.DataFrame(
+          0,
+          index=date_lbls_7d,
+          columns=sorted(rto_7d_df["_rto_st"].unique().tolist()),
+      )
+      for d_k, d_lbl in zip(dates_7d, date_lbls_7d):
+        sub_d = rto_7d_df[rto_7d_df["_disp_d"] == d_k]
+        if not sub_d.empty:
+          vc = sub_d.groupby("_rto_st")["Base_Order_ID"].nunique()
+          for k_st, v_cnt in vc.items():
+            rto_st_piv.loc[d_lbl, k_st] = int(v_cnt)
+
+      fig_rto_st = go.Figure()
+      for idx_s, st_nm in enumerate(rto_st_piv.columns):
+        y_s = rto_st_piv[st_nm].to_numpy(dtype=int)
+        fig_rto_st.add_trace(
+            go.Bar(
+                x=rto_st_piv.index,
+                y=y_s,
+                name=st_nm,
+                marker=dict(
+                    color=status_palette[idx_s % len(status_palette)],
+                    cornerradius=4,
+                ),
+                text=[str(v) if v > 0 else "" for v in y_s],
+                textposition="inside",
+            )
+        )
+      _style_fig(
+          fig_rto_st,
+          height=245,
+          margins=dict(l=8, r=8, t=28, b=10),
+          hovermode="x unified",
+      )
+      fig_rto_st.update_layout(barmode="stack")
+      st.plotly_chart(
+          fig_rto_st, use_container_width=True, key="daily_rto_status_chart"
+      )
+
+      rto_full_cols = [
+          c
+          for c in [
+              "Base_Order_ID",
+              "Order_ID",
+              "Dispatch_Date",
+              "Order_Date",
+              "Customer_Name",
+              "Carrier",
+              "Tracking_Number",
+              "Shipment_Status",
+              "Amount",
+              "Order_Notes",
+          ]
+          if c in rto_7d_df.columns
+      ]
+      rto_full_view = rto_7d_df.sort_values(
+          by="Dispatch_Date_dt", ascending=False
+      )[rto_full_cols if rto_full_cols else rto_7d_df.columns.tolist()]
+      rto_sum_df = rto_st_piv.reset_index().rename(
+          columns={"index": "Dispatch_Date"}
+      )
+      rto_sum_df["Total_RTO_Orders"] = rto_st_piv.sum(axis=1).values
+
+      st.download_button(
+          label="📊 Download Full RTO Status Data (Excel)",
+          data=_to_excel_bytes({
+              "RTO_Full_Details": rto_full_view,
+              "RTO_Daily_Summary": rto_sum_df,
+          }),
+          file_name=f"daily_rto_status_full_{start_7d}_{selected_date}.xlsx",
+          mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          key="dl_daily_rto_status_xlsx",
+      )
+      _safe_dataframe(
+          rto_full_view, use_container_width=True, height=195, hide_index=True
+      )
+      _html(
+          f'<div class="viz-info"><b>7D RTO Full Records:</b>'
+          f" <b>{len(rto_full_view):,}</b> rows"
+          f" ({int(rto_st_piv.values.sum()):,} unique orders) across"
+          f" <b>{len(rto_st_piv.columns)}</b> status(es).</div>"
+      )
+    else:
+      empty_rto_df = pd.DataFrame(
+          {"Dispatch_Date": date_lbls_7d, "RTO_Orders": [0] * 7}
+      )
+      st.download_button(
+          label="📊 Download Full RTO Status Data (Excel)",
+          data=_to_excel_bytes({
+              "RTO_Full_Details": pd.DataFrame(),
+              "RTO_Daily_Summary": empty_rto_df,
+          }),
+          file_name=f"daily_rto_status_full_{start_7d}_{selected_date}.xlsx",
+          mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          key="dl_daily_rto_status_empty_xlsx",
+      )
+      st.info("No RTO orders in the selected 7-day window.")
+    _html("</div>")
+
+  with s2b_r:
+    _html(
+        '<div class="viz-card"><div class="viz-heading">🔄 Daily Exchange'
+        " Status Breakdown (7 Days)</div>"
+    )
+    ex_7d_df = (
+        f_rev[f_rev["_rev_d"].isin(dates_7d)].copy()
+        if (not f_rev.empty and "_rev_d" in f_rev.columns)
+        else pd.DataFrame()
+    )
+    ex_st_col = (
+        _find_col(
+            ex_7d_df,
+            ["Reverse_Status", "Return_Status", "Exchange_Status", "Status"],
+        )
+        if not ex_7d_df.empty
+        else None
+    )
+    ex_id_col = (
+        _find_col(ex_7d_df, ["Order_ID", "Base_Order_ID"])
+        if not ex_7d_df.empty
+        else None
+    )
+    if not ex_7d_df.empty:
+      ex_7d_df["_ex_st"] = (
+          ex_7d_df[ex_st_col]
+          .fillna("Exchange")
+          .astype(str)
+          .str.strip()
+          .replace("", "Exchange")
+          if ex_st_col
+          else "Exchange"
+      )
+      ex_st_piv = pd.DataFrame(
+          0,
+          index=date_lbls_7d,
+          columns=sorted(ex_7d_df["_ex_st"].unique().tolist()),
+      )
+      for d_k, d_lbl in zip(dates_7d, date_lbls_7d):
+        sub_e = ex_7d_df[ex_7d_df["_rev_d"] == d_k]
+        if not sub_e.empty:
+          vc_e = (
+              sub_e.groupby("_ex_st")[ex_id_col].nunique()
+              if ex_id_col
+              else sub_e.groupby("_ex_st").size()
+          )
+          for k_st, v_cnt in vc_e.items():
+            ex_st_piv.loc[d_lbl, k_st] = int(v_cnt)
+
+      fig_ex_st = go.Figure()
+      for idx_e, st_nm in enumerate(ex_st_piv.columns):
+        y_e = ex_st_piv[st_nm].to_numpy(dtype=int)
+        fig_ex_st.add_trace(
+            go.Bar(
+                x=ex_st_piv.index,
+                y=y_e,
+                name=st_nm,
+                marker=dict(
+                    color=status_palette[(idx_e + 2) % len(status_palette)],
+                    cornerradius=4,
+                ),
+                text=[str(v) if v > 0 else "" for v in y_e],
+                textposition="inside",
+            )
+        )
+      _style_fig(
+          fig_ex_st,
+          height=245,
+          margins=dict(l=8, r=8, t=28, b=10),
+          hovermode="x unified",
+      )
+      fig_ex_st.update_layout(barmode="stack")
+      st.plotly_chart(
+          fig_ex_st, use_container_width=True, key="daily_ex_status_chart"
+      )
+
+      ex_full_cols = [
+          c
+          for c in ex_7d_df.columns
+          if not c.startswith("_") and not c.endswith("_dt")
+      ]
+      ex_sort_col = (
+          "Pickup_Date_dt" if "Pickup_Date_dt" in ex_7d_df.columns else None
+      )
+      ex_full_view = (
+          ex_7d_df.sort_values(by=ex_sort_col, ascending=False)[ex_full_cols]
+          if ex_sort_col
+          else ex_7d_df[ex_full_cols]
+      )
+      ex_sum_df = ex_st_piv.reset_index().rename(
+          columns={"index": "Pickup_Date"}
+      )
+      ex_sum_df["Total_Exchange_Orders"] = ex_st_piv.sum(axis=1).values
+
+      st.download_button(
+          label="📊 Download Full Exchange Status Data (Excel)",
+          data=_to_excel_bytes({
+              "Exchange_Full_Details": ex_full_view,
+              "Exchange_Daily_Summary": ex_sum_df,
+          }),
+          file_name=f"daily_exchange_status_full_{start_7d}_{selected_date}.xlsx",
+          mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          key="dl_daily_ex_status_xlsx",
+      )
+      _safe_dataframe(
+          ex_full_view, use_container_width=True, height=195, hide_index=True
+      )
+      _html(
+          f'<div class="viz-info"><b>7D Exchange Full Records:</b>'
+          f" <b>{len(ex_full_view):,}</b> rows"
+          f" ({int(ex_st_piv.values.sum()):,} unique orders) across"
+          f" <b>{len(ex_st_piv.columns)}</b> status(es).</div>"
+      )
+    else:
+      empty_ex_df = pd.DataFrame(
+          {"Pickup_Date": date_lbls_7d, "Exchange_Orders": [0] * 7}
+      )
+      st.download_button(
+          label="📊 Download Full Exchange Status Data (Excel)",
+          data=_to_excel_bytes({
+              "Exchange_Full_Details": pd.DataFrame(),
+              "Exchange_Daily_Summary": empty_ex_df,
+          }),
+          file_name=f"daily_exchange_status_full_{start_7d}_{selected_date}.xlsx",
+          mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          key="dl_daily_ex_status_empty_xlsx",
+      )
+      st.info("No exchange records in the selected 7-day window.")
+    _html("</div>")
 
   _html(
       '<div class="sec-bar">Section 3 — MOM RTO & Actionable Unfulfilled'
@@ -1812,23 +2804,19 @@ def render_daily_page():
         go.Bar(
             x=m_lbls,
             y=m_vals,
-            marker=dict(color=indigo_shades, cornerradius=5),
+            marker=dict(color=indigo_shades, cornerradius=6),
             text=[f"<b>{v}</b>" for v in m_vals],
             textposition="outside",
             textfont=dict(size=10.5),
         )
     )
-    fig_mom.update_layout(
+    _style_fig(
+        fig_mom,
         height=240,
-        margin=dict(l=5, r=5, t=24, b=5),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        yaxis=dict(
-            range=[0, max(list(m_vals) + [1]) * 1.28],
-            showgrid=True,
-            gridcolor="#F1F5F9",
-        ),
+        margins=dict(l=6, r=6, t=24, b=6),
+        showlegend=False,
     )
+    fig_mom.update_yaxes(range=[0, max(list(m_vals) + [1]) * 1.30])
     st.plotly_chart(fig_mom, use_container_width=True)
     peak_m_txt = (
         f"{m_lbls[int(np.argmax(m_vals))]} ({int(np.max(m_vals)):,})"
@@ -1876,7 +2864,7 @@ def render_daily_page():
 
 
 # ==============================================================================
-# 7. PAGE 2: SHOPIFY ANALYSIS
+# 7. PAGE 2: SHOPIFY ANALYSIS (BANNER ON TOP + RTO & RETURN CONTROL AT BOTTOM)
 # ==============================================================================
 def render_shopify_page():
   if model_src is None:
@@ -1895,12 +2883,46 @@ def render_shopify_page():
   min_d = valid_order_dates.min().date()
   max_d = valid_order_dates.max().date()
 
-  f_c1, f_c2, f_c3 = st.columns([1.2, 1.0, 1.0])
+  avail_months_shp = sorted(
+      valid_order_dates.dt.to_period("M").astype(str).unique().tolist(),
+      reverse=True,
+  )
+  latest_m_shp = avail_months_shp[0]
+  def_end_shp = _resolve_default_latest_date(min_d, max_d)
+  def_start_shp, _ = _month_bounds(latest_m_shp, min_d, def_end_shp)
+  _sync_refresh_dates("shp", min_d, max_d, def_start_shp, def_end_shp)
+
+  disp_start = st.session_state.get("shp_start_date", def_start_shp)
+  disp_end = st.session_state.get("shp_end_date", def_end_shp)
+
+  _html(f"""
+    <div class="exec-banner">
+        <div class="exec-banner-left">
+            {LOGO_BANNER_HTML}
+            <div>
+                <div class="exec-title">ARTH LIFE Kids Fashion — Shopify Analysis</div>
+                <div class="exec-sub">Pure RTO & Cancelled Exchange Returns, Financial KPIs & SKU/Size Return Control</div>
+            </div>
+        </div>
+        <div class="exec-pill">📅 Created: {disp_start.strftime('%d %b %Y')} — {disp_end.strftime('%d %b %Y')}</div>
+    </div>
+    """)
+
+  f_c1, f_c2, f_c3, f_c4 = st.columns([1.15, 1.05, 1.0, 1.0])
   with f_c1:
+    sel_m_shp = st.selectbox(
+        "🗓️ Month-wise Filter",
+        options=["Latest Month (" + latest_m_shp + ")"]
+        + avail_months_shp
+        + ["All Available Dates"],
+        index=0,
+        key="shp_month_sel",
+    )
+  with f_c2:
     preset = st.selectbox(
-        "📅 Quick Date Preset",
+        "📅 Quick Preset",
         [
-            "Custom Dates",
+            "Month / Latest",
             "01 Oct – 05 Nov 2026",
             "01 Sep – 14 Sep 2026",
             "All Available Dates",
@@ -1909,47 +2931,37 @@ def render_shopify_page():
         key="shp_preset",
     )
   if preset == "01 Sep – 14 Sep 2026":
-    init_start = min(max(datetime.date(2026, 9, 1), min_d), max_d)
-    init_end = max(min(datetime.date(2026, 9, 14), max_d), min_d)
-  elif preset == "All Available Dates":
-    init_start, init_end = min_d, max_d
+    p_s = min(max(datetime.date(2026, 9, 1), min_d), max_d)
+    p_e = max(min(datetime.date(2026, 9, 14), max_d), min_d)
+  elif preset == "All Available Dates" or sel_m_shp == "All Available Dates":
+    p_s, p_e = min_d, max_d
+  elif preset == "01 Oct – 05 Nov 2026":
+    p_s = min(max(datetime.date(2026, 10, 1), min_d), max_d)
+    p_e = max(min(datetime.date(2026, 11, 5), max_d), min_d)
   else:
-    init_start = min(max(datetime.date(2026, 10, 1), min_d), max_d)
-    init_end = max(min(datetime.date(2026, 11, 5), max_d), min_d)
-
-  with f_c2:
-    start_date = st.date_input(
-        "📅 Start Date",
-        value=init_start,
-        min_value=min_d,
-        max_value=max_d,
-        key="shp_start_date",
+    chosen_m = (
+        latest_m_shp if sel_m_shp.startswith("Latest Month") else sel_m_shp
     )
+    p_s, p_e = _month_bounds(chosen_m, min_d, max_d)
+
+  if st.session_state.get("_shp_last_choice") != (sel_m_shp, preset):
+    st.session_state["_shp_last_choice"] = (sel_m_shp, preset)
+    st.session_state["shp_start_date"] = p_s
+    st.session_state["shp_end_date"] = p_e
+    st.rerun()
+
   with f_c3:
+    start_date = st.date_input(
+        "📅 Start Date", min_value=min_d, max_value=max_d, key="shp_start_date"
+    )
+  with f_c4:
     end_date = st.date_input(
-        "📅 End Date",
-        value=init_end,
-        min_value=min_d,
-        max_value=max_d,
-        key="shp_end_date",
+        "📅 End Date", min_value=min_d, max_value=max_d, key="shp_end_date"
     )
 
   if start_date > end_date:
     st.error("Start Date must be on or before End Date.")
     return
-
-  _html(f"""
-    <div class="exec-banner">
-        <div class="exec-banner-left">
-            {LOGO_BANNER_HTML}
-            <div>
-                <div class="exec-title">ARTH LIFE Kids Fashion — Shopify Analysis</div>
-                <div class="exec-sub">Pure RTO & Cancelled Exchange Returns, Financial KPIs & Day-Wise Trends</div>
-            </div>
-        </div>
-        <div class="exec-pill">📅 Created: {start_date.strftime('%d %b %Y')} — {end_date.strftime('%d %b %Y')}</div>
-    </div>
-    """)
 
   p_orders = df_orders[
       (df_orders["Order_Date_dt"].dt.date >= start_date)
@@ -1984,8 +2996,13 @@ def render_shopify_page():
             "Order_Total",
             "Order_Notes",
             "Customer_Name",
+            "Customer_Region",
+            "Shipping_State",
+            "State",
+            "Shipping_City",
         ]
         if c in p_orders.columns
+        and (c == base_oid_col or c not in p_disp.columns)
     ]
     p_disp = p_disp.merge(
         p_orders[merge_cols].drop_duplicates(subset=[base_oid_col]),
@@ -2374,7 +3391,7 @@ def render_shopify_page():
               y=daily["Orders"],
               name="Unique Orders",
               marker=dict(color="#6366F1", cornerradius=6),
-              opacity=0.85,
+              opacity=0.88,
               text=daily["Orders"],
               textposition="outside",
               cliponaxis=False,
@@ -2393,6 +3410,8 @@ def render_shopify_page():
               y=daily["Rev_Lakhs"],
               name="Revenue (₹ Lakhs)",
               mode="lines+markers",
+              fill="tozeroy",
+              fillcolor="rgba(236, 72, 153, 0.08)",
               line=dict(color="#EC4899", width=3, shape="spline"),
               marker=dict(
                   size=7, color="#FFFFFF", line=dict(width=2.5, color="#EC4899")
@@ -2412,42 +3431,23 @@ def render_shopify_page():
           if not daily.empty
           else 1.0
       )
-      fig_dual.update_layout(
+      _style_fig(
+          fig_dual,
           height=410,
-          margin=dict(l=15, r=15, t=40, b=60),
-          paper_bgcolor="rgba(0,0,0,0)",
-          plot_bgcolor="rgba(0,0,0,0)",
+          margins=dict(l=15, r=15, t=40, b=60),
           hovermode="x unified",
-          bargap=0.28,
-          legend=dict(
-              orientation="h",
-              yanchor="bottom",
-              y=1.04,
-              xanchor="right",
-              x=1,
-              font=dict(size=12),
-          ),
-          font=dict(family="Plus Jakarta Sans", color="#334155"),
       )
+      fig_dual.update_layout(bargap=0.28)
       fig_dual.update_xaxes(
-          tickangle=-45,
-          tickfont=dict(size=11, color="#475569"),
-          nticks=18,
-          showgrid=False,
+          tickangle=-45, tickfont=dict(size=11, color="#475569"), nticks=18
       )
       fig_dual.update_yaxes(
-          title_text="Unique Orders",
-          range=[0, max_ord_y],
-          showgrid=True,
-          gridcolor="#F1F5F9",
-          zeroline=False,
-          secondary_y=False,
+          title_text="Unique Orders", range=[0, max_ord_y], secondary_y=False
       )
       fig_dual.update_yaxes(
           title_text="Revenue (₹ Lakhs)",
           range=[0, max_rev_y],
           showgrid=False,
-          zeroline=False,
           secondary_y=True,
       )
       st.plotly_chart(fig_dual, use_container_width=True)
@@ -2500,7 +3500,7 @@ def render_shopify_page():
           height=210,
           hide_index=True,
       )
-      _html("</div>")
+      st.markdown("</div>", unsafe_allow_html=True)
 
     with c_right:
       _html(
@@ -2549,22 +3549,16 @@ def render_shopify_page():
               textfont=dict(size=12, color="#0F172A"),
           )
       )
-      fig_fun.update_layout(
+      _style_fig(
+          fig_fun,
           height=410,
-          margin=dict(l=10, r=60, t=20, b=20),
-          paper_bgcolor="rgba(0,0,0,0)",
-          plot_bgcolor="rgba(0,0,0,0)",
-          xaxis=dict(
-              showgrid=True,
-              gridcolor="#F1F5F9",
-              zeroline=False,
-              range=[0, max(funnel_vals + [1]) * 1.22],
-          ),
-          yaxis=dict(showgrid=False, tickfont=dict(size=12)),
-          font=dict(family="Plus Jakarta Sans", color="#334155"),
+          margins=dict(l=10, r=60, t=20, b=20),
+          showlegend=False,
       )
+      fig_fun.update_xaxes(range=[0, max(funnel_vals + [1]) * 1.22])
+      fig_fun.update_yaxes(showgrid=False, tickfont=dict(size=12))
       st.plotly_chart(fig_fun, use_container_width=True)
-      _html("</div>")
+      st.markdown("</div>", unsafe_allow_html=True)
 
   with tab2:
     m1, m2, m3, m4, m5 = st.columns(5)
@@ -2600,10 +3594,11 @@ def render_shopify_page():
           ' class="sub-kpi-ico" style="background:#F3E8FF;">🔄</div></div>'
       )
 
+    # Section 1: Pure RTO Analysis
     _html(f"""
         <div class="sec-header-rto">
             <div class="sec-title">🚚 Section 1: Pure RTO Analysis (Pure RTO: {pure_rto_cnt:,} | Cancelled Exchanges: {canc_exch_cnt:,} | Total Returns: {tot_ret_cnt:,})</div>
-            <div class="sec-sub">RTO Status Breakdown & Day-Wise RTO Orders Trend</div>
+            <div class="sec-sub">RTO Status Donut, Region & State-wise RTO Returns & Day-Wise RTO Orders Trend</div>
         </div>
         """)
 
@@ -2612,7 +3607,8 @@ def render_shopify_page():
         if (not p_disp.empty and "Is_RTO" in p_disp.columns)
         else pd.DataFrame()
     )
-    rto_c1, rto_c2 = st.columns([1.05, 1.45])
+    rto_c1, rto_c2, rto_c3 = st.columns([1.05, 1.1, 1.35])
+
     with rto_c1:
       _html(
           '<div class="card-box"><div class="card-title">🍩 RTO Status'
@@ -2643,12 +3639,90 @@ def render_shopify_page():
                 f"<b>{pure_rto_cnt:,}</b><br>Pure RTO",
             ),
             use_container_width=True,
+            key="shp_s1_rto_donut",
+        )
+        top_rto_st = rto_st_agg.sort_values("Count", ascending=False).iloc[0]
+        _html(
+            f'<div class="viz-info"><b>Top RTO Status:</b>'
+            f' <b>{top_rto_st["Status"]}</b>'
+            f' ({int(top_rto_st["Count"]):,}) · Pending Hub:'
+            f" <b>{rto_hub_orders:,}</b>.</div>"
         )
       else:
         st.info("No RTO orders in selected period.")
       _html("</div>")
 
     with rto_c2:
+      _html(
+          '<div class="card-box"><div class="card-title">🗺️ Region &'
+          " State-wise RTO Returns</div>"
+      )
+      if not rto_df.empty and disp_base_col:
+        r_col_d = _find_col(rto_df, ["Customer_Region", "Region"])
+        s_col_d = _find_col(rto_df, ["Shipping_State", "State"])
+        if r_col_d and s_col_d:
+          rto_df["Region_State_Lbl"] = (
+              rto_df[r_col_d].fillna("Unknown").astype(str).str.strip()
+              + " — "
+              + rto_df[s_col_d].fillna("Unknown").astype(str).str.strip()
+          )
+          geo_rto = (
+              rto_df.groupby("Region_State_Lbl")[disp_base_col]
+              .nunique()
+              .reset_index(name="RTO_Orders")
+              .sort_values("RTO_Orders", ascending=True)
+              .tail(8)
+          )
+          y_lbl_col = "Region_State_Lbl"
+        else:
+          fallback_col = (
+              r_col_d or s_col_d or _find_col(rto_df, ["Shipping_City", "City"])
+          )
+          geo_rto = (
+              rto_df.groupby(
+                  rto_df[fallback_col].fillna("Unknown").astype(str).str.strip()
+              )[disp_base_col]
+              .nunique()
+              .reset_index(name="RTO_Orders")
+              .sort_values("RTO_Orders", ascending=True)
+              .tail(8)
+          )
+          y_lbl_col = fallback_col
+
+        fig_geo_rto = go.Figure(
+            go.Bar(
+                y=geo_rto[y_lbl_col],
+                x=geo_rto["RTO_Orders"],
+                orientation="h",
+                marker=dict(color="#0284C7", cornerradius=8),
+                text=geo_rto["RTO_Orders"],
+                textposition="outside",
+                cliponaxis=False,
+            )
+        )
+        _style_fig(
+            fig_geo_rto,
+            height=370,
+            margins=dict(l=10, r=45, t=20, b=20),
+            showlegend=False,
+        )
+        fig_geo_rto.update_xaxes(
+            range=[0, max(float(geo_rto["RTO_Orders"].max()) * 1.28, 3.0)]
+        )
+        st.plotly_chart(
+            fig_geo_rto, use_container_width=True, key="shp_s1_geo_rto"
+        )
+        top_geo_row = geo_rto.iloc[-1]
+        _html(
+            f'<div class="viz-info"><b>Highest RTO Segment:</b>'
+            f' <b>{top_geo_row[y_lbl_col]}</b>'
+            f' ({int(top_geo_row["RTO_Orders"]):,} orders).</div>'
+        )
+      else:
+        st.info("No RTO region/state data.")
+      _html("</div>")
+
+    with rto_c3:
       _html(
           '<div class="card-box"><div class="card-title">📅 Day-Wise RTO Orders'
           " Analysis</div>"
@@ -2685,31 +3759,55 @@ def render_shopify_page():
                 y=d_rto["RTO_Count"],
                 name="Trend",
                 mode="lines+markers",
-                line=dict(color="#EA580C", width=2.5, shape="spline"),
+                fill="tozeroy",
+                fillcolor="rgba(234, 88, 12, 0.10)",
+                line=dict(color="#EA580C", width=2.6, shape="spline"),
+                marker=dict(
+                    size=6.5,
+                    color="#FFFFFF",
+                    line=dict(color="#EA580C", width=2),
+                ),
             )
         )
-        fig_d_rto.update_layout(
+        _style_fig(
+            fig_d_rto,
             height=370,
-            margin=dict(l=15, r=15, t=25, b=55),
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
+            margins=dict(l=15, r=15, t=25, b=55),
             showlegend=False,
-            xaxis=dict(tickangle=-45, nticks=18, showgrid=False),
-            yaxis=dict(
-                showgrid=True,
-                gridcolor="#F1F5F9",
-                range=[0, max(float(d_rto["RTO_Count"].max()) * 1.32, 3.0)],
-            ),
+            hovermode="x unified",
         )
-        st.plotly_chart(fig_d_rto, use_container_width=True)
+        fig_d_rto.update_xaxes(tickangle=-45, nticks=18)
+        fig_d_rto.update_yaxes(
+            range=[0, max(float(d_rto["RTO_Count"].max()) * 1.32, 3.0)]
+        )
+        st.plotly_chart(
+            fig_d_rto, use_container_width=True, key="shp_s1_day_rto"
+        )
+        peak_rto_row = d_rto.loc[d_rto["RTO_Count"].idxmax()]
+        _html(
+            '<div class="viz-info"><b>Peak RTO Day:</b>'
+            f' <b>{peak_rto_row["Date_Lbl"]}</b>'
+            f' ({int(peak_rto_row["RTO_Count"]):,}) · Avg:'
+            f' <b>{d_rto["RTO_Count"].mean():.1f}/day</b>.</div>'
+        )
       else:
         st.info("No day-wise RTO data.")
       _html("</div>")
 
+    # Section 2: Exchange Analysis (INCLUDES ALL EXCHANGES — DOES NOT EXCLUDE CANCELLED)
+    all_exch_cnt = (
+        int(
+            p_rev_all[
+                rev_order_id_col if rev_order_id_col else rev_base_col
+            ].nunique()
+        )
+        if not p_rev_all.empty
+        else 0
+    )
     _html(f"""
         <div class="sec-header-exch">
-            <div class="sec-title">🔄 Section 2: Exchange Analysis (Active Exchanges: {exch_cnt:,} | Exchanged Cancelled: {canc_exch_cnt:,})</div>
-            <div class="sec-sub">Exchanged Status by Reverse_Status & Day-Wise Exchange Orders</div>
+            <div class="sec-title">🔄 Section 2: Exchange Analysis (All Exchanges: {all_exch_cnt:,} | Active: {exch_cnt:,} | Cancelled: {canc_exch_cnt:,})</div>
+            <div class="sec-sub">Exchanged Status by Reverse_Status, Day-Wise Exchange Orders (All Exchanges incl. Cancelled) & Reverse Logistics Table</div>
         </div>
         """)
 
@@ -2752,6 +3850,12 @@ def render_shopify_page():
                 f"<b>{int(ex_st_df['Count'].sum()):,}</b><br>Total Exch",
             ),
             use_container_width=True,
+            key="shp_s2_ex_donut",
+        )
+        _html(
+            f'<div class="viz-info"><b>Exchange Mix:</b> Active'
+            f" <b>{exch_cnt:,}</b> vs Cancelled <b>{canc_exch_cnt:,}</b>"
+            f" across {len(ex_st_df)} statuses.</div>"
         )
       else:
         st.info(
@@ -2762,10 +3866,10 @@ def render_shopify_page():
     with ex_c2:
       _html(
           '<div class="card-box"><div class="card-title">📅 Day-Wise Exchange'
-          " Orders Analysis (Non-Cancelled)</div>"
+          " Orders Analysis (All Exchanges)</div>"
       )
-      if not p_rev_active.empty and rev_base_col:
-        rev_d = p_rev_active.merge(
+      if not p_rev_all.empty and rev_base_col:
+        rev_d = p_rev_all.merge(
             p_orders_uniq[[base_oid_col, "Order_Date_dt"]],
             left_on=rev_base_col,
             right_on=base_oid_col,
@@ -2776,11 +3880,23 @@ def render_shopify_page():
             if (rev_order_id_col and rev_order_id_col in rev_d.columns)
             else rev_base_col
         )
-        if "Order_Date_dt" in rev_d.columns and rev_d["Order_Date_dt"].notna().any():
+        if (
+            "Pickup_Date_dt" in rev_d.columns
+            and rev_d["Pickup_Date_dt"].notna().any()
+        ):
+          rev_d["_ex_plot_dt"] = rev_d["Pickup_Date_dt"].fillna(
+              rev_d["Order_Date_dt"]
+          )
+        else:
+          rev_d["_ex_plot_dt"] = rev_d["Order_Date_dt"]
+
+        if rev_d["_ex_plot_dt"].notna().any():
           d_ex = (
-              rev_d.groupby(rev_d["Order_Date_dt"].dt.date)[id_for_day]
+              rev_d.dropna(subset=["_ex_plot_dt"])
+              .groupby(rev_d["_ex_plot_dt"].dt.date)[id_for_day]
               .nunique()
               .reset_index(name="Exchange_Count")
+              .rename(columns={"_ex_plot_dt": "Order_Date_dt"})
               .sort_values("Order_Date_dt")
           )
           d_ex["Date_Lbl"] = pd.to_datetime(d_ex["Order_Date_dt"]).dt.strftime(
@@ -2791,7 +3907,7 @@ def render_shopify_page():
               go.Bar(
                   x=d_ex["Date_Lbl"],
                   y=d_ex["Exchange_Count"],
-                  name="Day-Wise Exchanges",
+                  name="Day-Wise Exchanges (All)",
                   marker=dict(color="#A855F7", cornerradius=6),
                   text=d_ex["Exchange_Count"],
                   textposition="outside",
@@ -2804,23 +3920,38 @@ def render_shopify_page():
                   y=d_ex["Exchange_Count"],
                   name="Trend",
                   mode="lines+markers",
-                  line=dict(color="#7C3AED", width=2.5, shape="spline"),
+                  fill="tozeroy",
+                  fillcolor="rgba(124, 58, 237, 0.10)",
+                  line=dict(color="#7C3AED", width=2.6, shape="spline"),
+                  marker=dict(
+                      size=6.5,
+                      color="#FFFFFF",
+                      line=dict(color="#7C3AED", width=2),
+                  ),
               )
           )
-          fig_d_ex.update_layout(
+          _style_fig(
+              fig_d_ex,
               height=370,
-              margin=dict(l=15, r=15, t=25, b=55),
-              paper_bgcolor="rgba(0,0,0,0)",
-              plot_bgcolor="rgba(0,0,0,0)",
+              margins=dict(l=15, r=15, t=25, b=55),
               showlegend=False,
-              xaxis=dict(tickangle=-45, nticks=18, showgrid=False),
-              yaxis=dict(
-                  showgrid=True,
-                  gridcolor="#F1F5F9",
-                  range=[0, max(float(d_ex["Exchange_Count"].max()) * 1.32, 3.0)],
-              ),
+              hovermode="x unified",
           )
-          st.plotly_chart(fig_d_ex, use_container_width=True)
+          fig_d_ex.update_xaxes(tickangle=-45, nticks=18)
+          fig_d_ex.update_yaxes(
+              range=[0, max(float(d_ex["Exchange_Count"].max()) * 1.32, 3.0)]
+          )
+          st.plotly_chart(
+              fig_d_ex, use_container_width=True, key="shp_s2_day_ex"
+          )
+          peak_ex_row = d_ex.loc[d_ex["Exchange_Count"].idxmax()]
+          _html(
+              '<div class="viz-info"><b>Peak Exchange Day (All):</b>'
+              f' <b>{peak_ex_row["Date_Lbl"]}</b>'
+              f' ({int(peak_ex_row["Exchange_Count"]):,}) · Total:'
+              f' <b>{int(d_ex["Exchange_Count"].sum()):,}</b> · Avg:'
+              f' <b>{d_ex["Exchange_Count"].mean():.1f}/day</b>.</div>'
+          )
         else:
           st.info("No dated exchange records in selected period.")
       else:
@@ -2828,7 +3959,7 @@ def render_shopify_page():
       _html("</div>")
 
     st.markdown(
-        "#### 🔄 Exchanges Detail (Fact_Reverse_Logistics — Active:"
+        "#### 🔄 Reverse Logistics Table (Fact_Reverse_Logistics — Active:"
         f" {exch_cnt:,} | Cancelled: {canc_exch_cnt:,})"
     )
     if not p_rev_all.empty:
@@ -2836,7 +3967,7 @@ def render_shopify_page():
           p_rev_all, use_container_width=True, height=250, hide_index=True
       )
       st.download_button(
-          "⬇️ Download Exchanges CSV",
+          "⬇️ Download Reverse Logistics CSV",
           p_rev_all.to_csv(index=False).encode("utf-8"),
           f"exchanges_{start_date}_{end_date}.csv",
           "text/csv",
@@ -2845,6 +3976,106 @@ def render_shopify_page():
     else:
       st.info(
           "No Exchange records found for the selected created orders window."
+      )
+
+    if not p_disp.empty and disp_base_col:
+      prod_col_ctrl = _find_col(
+          p_disp, ["Clean_Product_Name", "Product_Name", "Title", "SKU"]
+      )
+      age_col_ctrl = _find_col(
+          p_disp, ["Product_Age_Group", "Age_Group", "Size"]
+      )
+      exch_all_oids = (
+          set(p_rev_all[rev_base_col].dropna())
+          if (not p_rev_all.empty and rev_base_col)
+          else set()
+      )
+
+      ctrl_df = p_disp.copy()
+      ctrl_df["_sku_lbl"] = (
+          ctrl_df[prod_col_ctrl]
+          .fillna("Unknown")
+          .astype(str)
+          .str.strip()
+          .replace("", "Unknown")
+          if prod_col_ctrl
+          else "Unknown"
+      )
+      if age_col_ctrl:
+        ctrl_df["_size_lbl"] = (
+            ctrl_df[age_col_ctrl]
+            .fillna("Unspecified")
+            .astype(str)
+            .str.strip()
+            .replace("", "Unspecified")
+        )
+      else:
+        ctrl_df["_size_lbl"] = _extract_size_from_text(ctrl_df["_sku_lbl"])
+
+      ctrl_df["_is_rto_flag"] = ctrl_df[disp_base_col].isin(rto_all_oids)
+      ctrl_df["_is_exch_flag"] = ctrl_df[disp_base_col].isin(exch_all_oids)
+      ctrl_df["_is_issue_flag"] = (
+          ctrl_df["_is_rto_flag"] | ctrl_df["_is_exch_flag"]
+      )
+
+      sku_grp = (
+          ctrl_df[
+              ~ctrl_df["_sku_lbl"]
+              .str.lower()
+              .isin(["", "nan", "none", "unknown", "standard"])
+          ]
+          .groupby("_sku_lbl")
+          .agg(
+              Dispatched_Orders=(disp_base_col, "nunique"),
+              RTO_Orders=(
+                  disp_base_col,
+                  lambda s: s[ctrl_df.loc[s.index, "_is_rto_flag"]].nunique(),
+              ),
+              Exchange_Return_Orders=(
+                  disp_base_col,
+                  lambda s: s[ctrl_df.loc[s.index, "_is_exch_flag"]].nunique(),
+              ),
+              Total_Issue_Orders=(
+                  disp_base_col,
+                  lambda s: s[ctrl_df.loc[s.index, "_is_issue_flag"]].nunique(),
+              ),
+          )
+          .reset_index()
+          .rename(columns={"_sku_lbl": "Product_SKU"})
+      )
+      size_grp = (
+          ctrl_df[
+              ~ctrl_df["_size_lbl"].str.lower().isin([
+                  "",
+                  "nan",
+                  "none",
+                  "unspecified",
+                  "standard / free size",
+              ])
+          ]
+          .groupby("_size_lbl")
+          .agg(
+              Orders=(disp_base_col, "nunique"),
+              Issues=(
+                  disp_base_col,
+                  lambda s: s[ctrl_df.loc[s.index, "_is_issue_flag"]].nunique(),
+              ),
+          )
+          .reset_index()
+          .rename(columns={"_size_lbl": "Size_Age_Group"})
+      )
+      _render_rto_return_control_section(
+          sku_df=sku_grp,
+          size_df=size_grp,
+          sku_col_name="Product_SKU",
+          size_col_name="Size_Age_Group",
+          rto_col_name="RTO_Orders",
+          ret_col_name="Exchange_Return_Orders",
+          issue_col_name="Total_Issue_Orders",
+          total_ord_col_name="Dispatched_Orders",
+          start_date=start_date,
+          end_date=end_date,
+          key_prefix="shp",
       )
 
   with tab3:
@@ -2914,26 +4145,35 @@ def render_shopify_page():
         top_a = age_s.value_counts().head(7).reset_index()
         top_a.columns = ["Age Group", "Count"]
         if not top_a.empty:
+          age_palette = [
+              "#8B5CF6",
+              "#7C3AED",
+              "#6366F1",
+              "#4F46E5",
+              "#0EA5E9",
+              "#06B6D4",
+              "#10B981",
+          ]
           fig_age = go.Figure(
               go.Bar(
                   x=top_a["Age Group"],
                   y=top_a["Count"],
-                  marker=dict(color="#8B5CF6", cornerradius=8),
+                  marker=dict(
+                      color=age_palette[: len(top_a)], cornerradius=8
+                  ),
                   text=top_a["Count"],
                   textposition="outside",
                   cliponaxis=False,
               )
           )
-          fig_age.update_layout(
+          _style_fig(
+              fig_age,
               height=310,
-              margin=dict(l=10, r=10, t=25, b=10),
-              paper_bgcolor="rgba(0,0,0,0)",
-              plot_bgcolor="rgba(0,0,0,0)",
-              yaxis=dict(
-                  showgrid=True,
-                  gridcolor="#F1F5F9",
-                  range=[0, max(float(top_a["Count"].max()) * 1.25, 3.0)],
-              ),
+              margins=dict(l=10, r=10, t=25, b=10),
+              showlegend=False,
+          )
+          fig_age.update_yaxes(
+              range=[0, max(float(top_a["Count"].max()) * 1.25, 3.0)]
           )
           st.plotly_chart(fig_age, use_container_width=True)
       _html("</div>")
@@ -3043,9 +4283,690 @@ def render_shopify_page():
 
 
 # ==============================================================================
-# 8. PAGE 3: MYNTRA ANALYSIS (Myntra_Consolidated_Orders.xlsx)
+# 7B. PAGE 2B: SHOPIFY FORECAST & COHORT (BANNER ON TOP + COHORT AT BOTTOM)
+# ==============================================================================
+def render_shopify_forecast_page():
+  """Render Shopify July-to-latest-month comparison, forecast & Customer Cohort Analysis at bottom."""
+  if model_src is None:
+    st.warning(
+        f"Model file `{MODEL_FILENAME}` was not found in GitHub or local"
+        " folders."
+    )
+    return
+
+  df_orders, df_disp, df_rev = load_model_excel(model_src)
+  valid_dates = df_orders["Order_Date_dt"].dropna()
+  if valid_dates.empty:
+    st.error("No valid dates found in Order_Date.")
+    return
+
+  fin_col = _find_col(df_orders, ["Financial_Status"])
+  if fin_col:
+    orders_clean = df_orders[
+        df_orders[fin_col].fillna("").astype(str).str.strip().str.lower()
+        != "voided"
+    ].copy()
+  else:
+    orders_clean = df_orders.copy()
+
+  oid_col = _find_col(orders_clean, ["Base_Order_ID", "Order_ID", "Name"])
+  if not oid_col:
+    st.error("Order identifier column (Base_Order_ID / Order_ID) not found.")
+    return
+
+  orders_clean["_dt"] = orders_clean["Order_Date_dt"]
+  orders_clean = orders_clean.dropna(subset=["_dt"]).copy()
+  if orders_clean.empty:
+    st.error("No valid non-voided order dates available.")
+    return
+
+  max_dt = orders_clean["_dt"].max().date()
+  min_dt = orders_clean["_dt"].min().date()
+  latest_end_fc = _resolve_default_latest_date(min_dt, max_dt)
+  july_candidate = datetime.date(latest_end_fc.year, 7, 1)
+  if july_candidate > latest_end_fc:
+    july_candidate = datetime.date(latest_end_fc.year - 1, 7, 1)
+  start_bound = max(min_dt, july_candidate)
+
+  jul_df = orders_clean[
+      (orders_clean["_dt"].dt.date >= start_bound)
+      & (orders_clean["_dt"].dt.date <= max_dt)
+  ].copy()
+  if jul_df.empty:
+    jul_df = orders_clean.copy()
+    start_bound = jul_df["_dt"].min().date()
+
+  avail_months_fc = sorted(
+      orders_clean["_dt"].dt.to_period("M").astype(str).unique().tolist(),
+      reverse=True,
+  )
+  latest_m_fc = avail_months_fc[0]
+  m_start_fc, _ = _month_bounds(latest_m_fc, min_dt, latest_end_fc)
+
+  if "_shp_fc_boot_seen" not in st.session_state:
+    st.session_state["_shp_fc_boot_seen"] = True
+    st.session_state["shp_fc_start"] = m_start_fc
+    st.session_state["shp_fc_end"] = latest_end_fc
+
+  disp_h_fc = st.session_state.get("shp_fc_horizon", 14)
+
+  _html(f"""
+    <div class="exec-banner">
+        <div class="exec-banner-left">
+            {LOGO_BANNER_HTML}
+            <div>
+                <div class="exec-title">ARTH LIFE Kids Fashion — Shopify Forecast & Comparison</div>
+                <div class="exec-sub">July ({start_bound.strftime('%b %Y')}) to Latest ({max_dt.strftime('%d %b %Y')}) • Period Comparison, Seasonality, Risk, Forecast & Cohort</div>
+            </div>
+        </div>
+        <div class="exec-pill">🔮 +{disp_h_fc}d Forecast</div>
+    </div>
+    """)
+
+  c_f1, c_f2, c_f3, c_f4, c_f5, c_f6 = st.columns([1.05, 0.95, 0.95, 0.9, 1.1, 0.85])
+  with c_f1:
+    sel_m_fc = st.selectbox(
+        "🗓️ Month / Range",
+        options=["Latest Month (" + latest_m_fc + ")"]
+        + avail_months_fc
+        + ["July to Latest"],
+        index=0,
+        key="shp_fc_month_sel",
+    )
+  if st.session_state.get("_shp_fc_last_m") != sel_m_fc:
+    st.session_state["_shp_fc_last_m"] = sel_m_fc
+    if sel_m_fc == "July to Latest":
+      st.session_state["shp_fc_start"] = start_bound
+      st.session_state["shp_fc_end"] = latest_end_fc
+    else:
+      m_c = latest_m_fc if sel_m_fc.startswith("Latest Month") else sel_m_fc
+      ms_c, me_c = _month_bounds(m_c, min_dt, max_dt)
+      st.session_state["shp_fc_start"] = ms_c
+      st.session_state["shp_fc_end"] = (
+          max(me_c, latest_end_fc) if m_c == latest_m_fc else me_c
+      )
+    st.rerun()
+
+  with c_f2:
+    range_start = st.date_input(
+        "📅 Start Date", min_value=min_dt, max_value=max_dt, key="shp_fc_start"
+    )
+  with c_f3:
+    range_end = st.date_input(
+        "📅 End Date", min_value=min_dt, max_value=max_dt, key="shp_fc_end"
+    )
+  with c_f4:
+    horizon_days = st.selectbox(
+        "🔮 Forecast Horizon",
+        options=[7, 14, 30],
+        index=1,
+        format_func=lambda d: f"Next {d} Days",
+        key="shp_fc_horizon",
+    )
+  with c_f5:
+    compare_mode = st.selectbox(
+        "⚖️ Comparison Baseline",
+        options=["Previous Equal Window", "Previous Calendar Month"],
+        index=0,
+        key="shp_fc_cmp_mode",
+    )
+  with c_f6:
+    conf_level = st.selectbox(
+        "🛡️ Confidence Band",
+        options=[0.80, 0.90],
+        index=0,
+        format_func=lambda c: f"{int(c*100)}% Band",
+        key="shp_fc_conf",
+    )
+
+  if range_start > range_end:
+    st.error("Analysis Start Date must be on or before Analysis End Date.")
+    return
+
+  cur_df = orders_clean[
+      (orders_clean["_dt"].dt.date >= range_start)
+      & (orders_clean["_dt"].dt.date <= range_end)
+  ].copy()
+  cur_uniq = (
+      cur_df.drop_duplicates(subset=[oid_col]).copy()
+      if not cur_df.empty
+      else cur_df.copy()
+  )
+
+  span_days = max((range_end - range_start).days + 1, 1)
+  if compare_mode == "Previous Equal Window":
+    prev_end = range_start - datetime.timedelta(days=1)
+    prev_start = prev_end - datetime.timedelta(days=span_days - 1)
+  else:
+    first_of_range = datetime.date(range_start.year, range_start.month, 1)
+    prev_end = first_of_range - datetime.timedelta(days=1)
+    prev_start = datetime.date(prev_end.year, prev_end.month, 1)
+
+  prev_df = orders_clean[
+      (orders_clean["_dt"].dt.date >= prev_start)
+      & (orders_clean["_dt"].dt.date <= prev_end)
+  ].copy()
+  prev_uniq = (
+      prev_df.drop_duplicates(subset=[oid_col]).copy()
+      if not prev_df.empty
+      else prev_df.copy()
+  )
+
+  cur_orders_cnt = int(cur_uniq[oid_col].nunique()) if not cur_uniq.empty else 0
+  prev_orders_cnt = (
+      int(prev_uniq[oid_col].nunique()) if not prev_uniq.empty else 0
+  )
+
+  cur_rev = (
+      float(cur_uniq["Order_Total"].sum())
+      if (not cur_uniq.empty and "Order_Total" in cur_uniq.columns)
+      else 0.0
+  )
+  prev_rev = (
+      float(prev_uniq["Order_Total"].sum())
+      if (not prev_uniq.empty and "Order_Total" in prev_uniq.columns)
+      else 0.0
+  )
+
+  cur_aov = cur_rev / cur_orders_cnt if cur_orders_cnt > 0 else 0.0
+  prev_aov = prev_rev / prev_orders_cnt if prev_orders_cnt > 0 else 0.0
+
+  cur_oids_set = (
+      set(cur_uniq[oid_col].dropna().astype(str))
+      if not cur_uniq.empty
+      else set()
+  )
+  prev_oids_set = (
+      set(prev_uniq[oid_col].dropna().astype(str))
+      if not prev_uniq.empty
+      else set()
+  )
+
+  cur_cod_cnt = (
+      int(
+          cur_uniq[cur_uniq["Payment_Category"] == "COD"][oid_col].nunique()
+      )
+      if (not cur_uniq.empty and "Payment_Category" in cur_uniq.columns)
+      else 0
+  )
+  prev_cod_cnt = (
+      int(
+          prev_uniq[prev_uniq["Payment_Category"] == "COD"][oid_col].nunique()
+      )
+      if (not prev_uniq.empty and "Payment_Category" in prev_uniq.columns)
+      else 0
+  )
+  cur_cod_share = (
+      (cur_cod_cnt / cur_orders_cnt * 100.0) if cur_orders_cnt > 0 else 0.0
+  )
+  prev_cod_share = (
+      (prev_cod_cnt / prev_orders_cnt * 100.0) if prev_orders_cnt > 0 else 0.0
+  )
+
+  disp_oid_col = (
+      _find_col(df_disp, ["Base_Order_ID", "Order_ID"])
+      if not df_disp.empty
+      else None
+  )
+  cur_rto_cnt = (
+      int(
+          df_disp[
+              df_disp[disp_oid_col].astype(str).isin(cur_oids_set)
+              & df_disp["Is_RTO"].astype(bool)
+          ][disp_oid_col].nunique()
+      )
+      if (not df_disp.empty and disp_oid_col and "Is_RTO" in df_disp.columns)
+      else 0
+  )
+  prev_rto_cnt = (
+      int(
+          df_disp[
+              df_disp[disp_oid_col].astype(str).isin(prev_oids_set)
+              & df_disp["Is_RTO"].astype(bool)
+          ][disp_oid_col].nunique()
+      )
+      if (not df_disp.empty and disp_oid_col and "Is_RTO" in df_disp.columns)
+      else 0
+  )
+  cur_disp_cnt = (
+      int(
+          df_disp[df_disp[disp_oid_col].astype(str).isin(cur_oids_set)][
+              disp_oid_col
+          ].nunique()
+      )
+      if (not df_disp.empty and disp_oid_col)
+      else 0
+  )
+  cur_rto_rate = (cur_rto_cnt / cur_disp_cnt * 100.0) if cur_disp_cnt > 0 else 0.0
+
+  def _delta_pct(cur_v, prev_v):
+    if prev_v > 0:
+      return ((cur_v - prev_v) / prev_v) * 100.0
+    return 0.0
+
+  ord_chg_pct = _delta_pct(cur_orders_cnt, prev_orders_cnt)
+  rev_chg_pct = _delta_pct(cur_rev, prev_rev)
+  aov_chg_pct = _delta_pct(cur_aov, prev_aov)
+
+  all_dates_idx = pd.date_range(start=range_start, end=range_end, freq="D")
+  daily_cur = (
+      cur_uniq.assign(_d=cur_uniq["_dt"].dt.normalize())
+      .groupby("_d")
+      .agg(Orders=(oid_col, "nunique"), Revenue=("Order_Total", "sum"))
+      .reindex(all_dates_idx, fill_value=0.0)
+  )
+  daily_cur["Orders"] = daily_cur["Orders"].astype(float)
+  daily_cur["Revenue"] = daily_cur["Revenue"].astype(float)
+
+  fit_window = daily_cur.tail(min(60, len(daily_cur))).copy()
+  dow_arr = fit_window.index.dayofweek
+  z_score = 1.2816 if conf_level == 0.80 else 1.6449
+
+  def _forecast_with_band(y_series: np.ndarray, days_ahead: int):
+    """Forecast using recent 7-day rolling baseline, damped 14-day slope, and day-of-week seasonality."""
+    fut_dates = pd.date_range(
+        start=range_end + datetime.timedelta(days=1),
+        periods=days_ahead,
+        freq="D",
+    )
+    clean_y = y_series.copy()
+    if len(clean_y) > 7 and clean_y[-1] == 0:
+      clean_y = clean_y[:-1]
+
+    if len(clean_y) >= 3 and np.std(clean_y) > 0:
+      recent_7 = clean_y[-min(7, len(clean_y)) :]
+      recent_14 = clean_y[-min(14, len(clean_y)) :]
+      baseline_level = float(np.mean(recent_7))
+
+      x_rec = np.arange(len(recent_14), dtype=float)
+      raw_slope, _ = np.polyfit(x_rec, recent_14, 1)
+      max_daily_step = baseline_level * 0.025
+      damped_slope = float(
+          np.clip(raw_slope * 0.45, -max_daily_step, max_daily_step)
+      )
+
+      dow_use = dow_arr[-len(clean_y) :]
+      overall_mean = max(float(np.mean(clean_y)), 1e-6)
+      dow_factors = {}
+      for dow_i in range(7):
+        vals_d = clean_y[dow_use == dow_i]
+        raw_f = (
+            float(np.mean(vals_d)) / overall_mean if len(vals_d) > 0 else 1.0
+        )
+        dow_factors[dow_i] = float(np.clip(raw_f, 0.75, 1.35))
+      avg_f = np.mean(list(dow_factors.values())) or 1.0
+      dow_factors = {k: v / avg_f for k, v in dow_factors.items()}
+
+      preds = []
+      for step_i, dt in enumerate(fut_dates, start=1):
+        effective_steps = sum(0.92**k for k in range(step_i))
+        level_t = max(
+            baseline_level * 0.55, baseline_level + damped_slope * effective_steps
+        )
+        preds.append(level_t * dow_factors[int(dt.dayofweek)])
+      preds = np.array(preds, dtype=float)
+
+      sigma = (
+          float(np.std(recent_14, ddof=1))
+          if len(recent_14) > 1
+          else baseline_level * 0.15
+      )
+      sigma = min(sigma, baseline_level * 0.35)
+      step_scale = np.sqrt(
+          1.0
+          + np.arange(1, days_ahead + 1, dtype=float)
+          / max(len(recent_14), 1)
+      )
+      margin = z_score * sigma * step_scale
+      lower = np.maximum(preds * 0.35, preds - margin)
+      upper = preds + margin
+      return fut_dates, preds, lower, upper, damped_slope
+
+    avg_val = max(0.0, float(np.mean(clean_y))) if len(clean_y) > 0 else 0.0
+    preds = np.full(days_ahead, avg_val, dtype=float)
+    return fut_dates, preds, preds * 0.75, preds * 1.25, 0.0
+
+  fut_dates, fc_orders, ord_low, ord_high, ord_slope = _forecast_with_band(
+      fit_window["Orders"].to_numpy(dtype=float), horizon_days
+  )
+  _, fc_rev, rev_low, rev_high, rev_slope = _forecast_with_band(
+      fit_window["Revenue"].to_numpy(dtype=float), horizon_days
+  )
+
+  pred_orders_total = float(np.sum(fc_orders))
+  pred_rev_total = float(np.sum(fc_rev))
+  pred_aov = pred_rev_total / pred_orders_total if pred_orders_total > 0 else cur_aov
+
+  k1, k2, k3, k4 = st.columns(4)
+  with k1:
+    _html(f"""
+        <div class="kpi-card">
+            <div>
+                <div class="kpi-lbl">Selected Period Orders</div>
+                <div class="kpi-val">{cur_orders_cnt:,}</div>
+                <span class="kpi-tag" style="background:#EEF2FF; color:#4F46E5;">Prev: {prev_orders_cnt:,} ({ord_chg_pct:+.1f}%)</span>
+            </div>
+            <div class="kpi-ico" style="background:#EEF2FF;">📦</div>
+        </div>
+        """)
+  with k2:
+    _html(f"""
+        <div class="kpi-card">
+            <div>
+                <div class="kpi-lbl">Selected Period Revenue</div>
+                <div class="kpi-val">₹{cur_rev:,.0f}</div>
+                <span class="kpi-tag" style="background:#ECFDF5; color:#059669;">Prev: ₹{prev_rev:,.0f} ({rev_chg_pct:+.1f}%)</span>
+            </div>
+            <div class="kpi-ico" style="background:#ECFDF5;">💰</div>
+        </div>
+        """)
+  with k3:
+    _html(f"""
+        <div class="kpi-card">
+            <div>
+                <div class="kpi-lbl">Forecast Orders ({horizon_days}d)</div>
+                <div class="kpi-val">{pred_orders_total:,.0f}</div>
+                <span class="kpi-tag" style="background:#F5F3FF; color:#7C3AED;">Range: {np.sum(ord_low):,.0f} – {np.sum(ord_high):,.0f}</span>
+            </div>
+            <div class="kpi-ico" style="background:#F5F3FF;">🔮</div>
+        </div>
+        """)
+  with k4:
+    _html(f"""
+        <div class="kpi-card">
+            <div>
+                <div class="kpi-lbl">Forecast Revenue ({horizon_days}d)</div>
+                <div class="kpi-val">₹{pred_rev_total:,.0f}</div>
+                <span class="kpi-tag" style="background:#FDF2F8; color:#BE185D;">Est. AOV: ₹{pred_aov:,.0f} ({aov_chg_pct:+.1f}%)</span>
+            </div>
+            <div class="kpi-ico" style="background:#FDF2F8;">📈</div>
+        </div>
+        """)
+
+  st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
+
+  trend_dir = (
+      "Upward" if rev_slope > 0 else ("Downward" if rev_slope < 0 else "Flat")
+  )
+  best_dow_idx = (
+      int(np.argmax(fc_rev[: min(7, len(fc_rev))])) if len(fc_rev) > 0 else 0
+  )
+  best_fc_day = (
+      fut_dates[best_dow_idx].strftime("%a (%d %b)")
+      if len(fut_dates) > 0
+      else "N/A"
+  )
+  best_fc_val = float(fc_rev[best_dow_idx]) if len(fc_rev) > 0 else 0.0
+  expected_rto_in_fc = pred_orders_total * (cur_rto_rate / 100.0)
+
+  _html(f"""
+    <div class="viz-card">
+        <div class="card-title">💡 Executive Forecast & Comparison Insights</div>
+        <div style="font-size:13px; color:#1E293B; line-height:1.65;">
+- <b>Period Comparison ({range_start.strftime('%d %b')}–{range_end.strftime('%d %b')} vs {prev_start.strftime('%d %b')}–{prev_end.strftime('%d %b')}):</b>
+              Revenue changed by <b>{rev_chg_pct:+.1f}%</b> and orders changed by <b>{ord_chg_pct:+.1f}%</b>, while AOV shifted from <b>₹{prev_aov:,.0f}</b> to <b>₹{cur_aov:,.0f}</b>.<br>
+- <b>Trend & Peak Window:</b> Recent 14-day revenue trajectory is <b>{trend_dir}</b> (<b>₹{rev_slope:+,.0f}/day</b> damped slope). Highest projected day in the forecast window is <b>{best_fc_day}</b> at <b>₹{best_fc_val:,.0f}</b>.<br>
+- <b>COD & Return Watchout:</b> Current COD share is <b>{cur_cod_share:.1f}%</b> (Prev: <b>{prev_cod_share:.1f}%</b>) and historical RTO rate is <b>{cur_rto_rate:.1f}%</b> (Prev RTO orders: <b>{prev_rto_cnt:,}</b>), implying ~<b>{expected_rto_in_fc:.0f}</b> potential RTO orders across the next {horizon_days} days.
+        </div>
+    </div>
+    """)
+
+  _html(
+      '<div class="card-box"><div class="card-title">📈 Daily Shopify'
+      " Revenue — Actual, 7D Moving Avg & Forecast Band</div>"
+  )
+  roll_rev_7d = daily_cur["Revenue"].rolling(7, min_periods=1).mean()
+  fig_fc_rev = go.Figure()
+  fig_fc_rev.add_trace(
+      go.Bar(
+          x=daily_cur.index.strftime("%d %b"),
+          y=daily_cur["Revenue"],
+          name="Actual Revenue (₹)",
+          marker=dict(color="#6366F1", cornerradius=5),
+          opacity=0.84,
+      )
+  )
+  fig_fc_rev.add_trace(
+      go.Scatter(
+          x=daily_cur.index.strftime("%d %b"),
+          y=roll_rev_7d,
+          name="7-Day Rolling Avg (₹)",
+          mode="lines",
+          line=dict(color="#0F172A", width=2.4, shape="spline"),
+      )
+  )
+  fig_fc_rev.add_trace(
+      go.Scatter(
+          x=fut_dates.strftime("%d %b"),
+          y=rev_high,
+          name=f"Upper Band ({int(conf_level*100)}%)",
+          mode="lines",
+          line=dict(width=0),
+          showlegend=False,
+      )
+  )
+  fig_fc_rev.add_trace(
+      go.Scatter(
+          x=fut_dates.strftime("%d %b"),
+          y=rev_low,
+          name=f"{int(conf_level*100)}% Confidence Band",
+          mode="lines",
+          line=dict(width=0),
+          fill="tonexty",
+          fillcolor="rgba(236, 72, 153, 0.16)",
+      )
+  )
+  fig_fc_rev.add_trace(
+      go.Scatter(
+          x=fut_dates.strftime("%d %b"),
+          y=fc_rev,
+          name=f"Forecast Revenue ({horizon_days}d)",
+          mode="lines+markers",
+          line=dict(color="#EC4899", width=3, dash="dash"),
+          marker=dict(
+              size=7.5, color="#FFFFFF", line=dict(color="#EC4899", width=2.2)
+          ),
+      )
+  )
+  _style_fig(
+      fig_fc_rev,
+      height=385,
+      margins=dict(l=15, r=15, t=30, b=50),
+      hovermode="x unified",
+  )
+  fig_fc_rev.update_xaxes(tickangle=-45, nticks=20)
+  st.plotly_chart(fig_fc_rev, use_container_width=True)
+  _html("</div>")
+
+  ch_l, ch_r = st.columns([1.35, 1.0])
+  with ch_l:
+    _html(
+        '<div class="card-box"><div class="card-title">📦 Daily Orders —'
+        " Actual, 7D Avg & Forecast Band</div>"
+    )
+    roll_ord_7d = daily_cur["Orders"].rolling(7, min_periods=1).mean()
+    fig_fc_ord = go.Figure()
+    fig_fc_ord.add_trace(
+        go.Bar(
+            x=daily_cur.index.strftime("%d %b"),
+            y=daily_cur["Orders"],
+            name="Actual Orders",
+            marker=dict(color="#0EA5E9", cornerradius=5),
+            opacity=0.84,
+        )
+    )
+    fig_fc_ord.add_trace(
+        go.Scatter(
+            x=daily_cur.index.strftime("%d %b"),
+            y=roll_ord_7d,
+            name="7D Avg Orders",
+            mode="lines",
+            line=dict(color="#0F172A", width=2.4, shape="spline"),
+        )
+    )
+    fig_fc_ord.add_trace(
+        go.Scatter(
+            x=fut_dates.strftime("%d %b"),
+            y=ord_high,
+            name="Upper Orders",
+            mode="lines",
+            line=dict(width=0),
+            showlegend=False,
+        )
+    )
+    fig_fc_ord.add_trace(
+        go.Scatter(
+            x=fut_dates.strftime("%d %b"),
+            y=ord_low,
+            name=f"{int(conf_level*100)}% Order Band",
+            mode="lines",
+            line=dict(width=0),
+            fill="tonexty",
+            fillcolor="rgba(16, 185, 129, 0.16)",
+        )
+    )
+    fig_fc_ord.add_trace(
+        go.Scatter(
+            x=fut_dates.strftime("%d %b"),
+            y=fc_orders,
+            name=f"Forecast Orders ({horizon_days}d)",
+            mode="lines+markers",
+            line=dict(color="#10B981", width=3, dash="dash"),
+            marker=dict(
+                size=7.5, color="#FFFFFF", line=dict(color="#10B981", width=2.2)
+            ),
+        )
+    )
+    _style_fig(
+        fig_fc_ord,
+        height=350,
+        margins=dict(l=15, r=15, t=30, b=50),
+        hovermode="x unified",
+    )
+    fig_fc_ord.update_xaxes(tickangle=-45, nticks=18)
+    st.plotly_chart(fig_fc_ord, use_container_width=True)
+    _html("</div>")
+
+  with ch_r:
+    _html(
+        '<div class="card-box"><div class="card-title">📅 Avg Revenue by'
+        " Day of Week</div>"
+    )
+    dow_order = [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+    ]
+    dow_agg = (
+        cur_uniq.assign(_dow=cur_uniq["_dt"].dt.day_name())
+        .groupby("_dow")
+        .agg(Avg_Rev=("Order_Total", "sum"), Orders=(oid_col, "nunique"))
+        .reindex(dow_order)
+        .fillna(0.0)
+    )
+    dow_counts = (
+        pd.Series(all_dates_idx.day_name())
+        .value_counts()
+        .reindex(dow_order)
+        .fillna(1)
+    )
+    dow_agg["Daily_Avg_Rev"] = (dow_agg["Avg_Rev"] / dow_counts.values).round(0)
+
+    dow_colors = [
+        "#818CF8",
+        "#6366F1",
+        "#4F46E5",
+        "#7C3AED",
+        "#8B5CF6",
+        "#A855F7",
+        "#EC4899",
+    ]
+    fig_dow = go.Figure(
+        go.Bar(
+            x=[d[:3] for d in dow_order],
+            y=dow_agg["Daily_Avg_Rev"],
+            marker=dict(color=dow_colors, cornerradius=7),
+            text=[
+                f"₹{v/1000:.1f}k" if v >= 1000 else f"₹{v:.0f}"
+                for v in dow_agg["Daily_Avg_Rev"]
+            ],
+            textposition="outside",
+            cliponaxis=False,
+        )
+    )
+    _style_fig(
+        fig_dow,
+        height=350,
+        margins=dict(l=10, r=10, t=30, b=35),
+        showlegend=False,
+    )
+    fig_dow.update_yaxes(
+        range=[0, max(float(dow_agg["Daily_Avg_Rev"].max()) * 1.25, 100.0)]
+    )
+    st.plotly_chart(fig_dow, use_container_width=True)
+    _html("</div>")
+
+  _html(
+      '<div class="card-box"><div class="card-title">🗓️ Monthly Shopify'
+      " Performance (July to Latest Month)</div>"
+  )
+  jul_uniq = jul_df.drop_duplicates(subset=[oid_col]).copy()
+  jul_uniq["Year_Month"] = jul_uniq["_dt"].dt.to_period("M").astype(str)
+  m_tbl = (
+      jul_uniq.groupby("Year_Month")
+      .agg(
+          Unique_Orders=(oid_col, "nunique"),
+          Gross_Revenue_INR=("Order_Total", "sum"),
+      )
+      .reset_index()
+      .sort_values("Year_Month")
+  )
+  m_tbl["AOV_INR"] = np.where(
+      m_tbl["Unique_Orders"] > 0,
+      (m_tbl["Gross_Revenue_INR"] / m_tbl["Unique_Orders"]).round(0),
+      0,
+  )
+  m_tbl["MoM_Revenue_Change_%"] = (
+      m_tbl["Gross_Revenue_INR"].pct_change().fillna(0.0).mul(100).round(1)
+  )
+  m_tbl["Gross_Revenue_INR"] = m_tbl["Gross_Revenue_INR"].round(2)
+  _safe_dataframe(m_tbl, use_container_width=True, height=220, hide_index=True)
+  _html("</div>")
+
+  st.markdown(f"#### 🔮 Future Forecast Schedule ({horizon_days} Days)")
+  fc_schedule = pd.DataFrame({
+      "Forecast_Date": fut_dates.strftime("%Y-%m-%d"),
+      "Day_of_Week": fut_dates.day_name(),
+      "Predicted_Orders": np.round(fc_orders, 1),
+      "Orders_Lower": np.round(ord_low, 1),
+      "Orders_Upper": np.round(ord_high, 1),
+      "Predicted_Revenue_INR": np.round(fc_rev, 2),
+      "Revenue_Lower_INR": np.round(rev_low, 2),
+      "Revenue_Upper_INR": np.round(rev_high, 2),
+  })
+  _safe_dataframe(
+      fc_schedule, use_container_width=True, height=260, hide_index=True
+  )
+  st.download_button(
+      "⬇️ Download Shopify Forecast CSV",
+      fc_schedule.to_csv(index=False).encode("utf-8"),
+      f"shopify_forecast_{range_start}_{range_end}_{horizon_days}d.csv",
+      "text/csv",
+      key="dl_shp_forecast_csv",
+  )
+
+  _render_customer_cohort_matrix(orders_clean, max_months=8)
+
+
+# ==============================================================================
+# 8. PAGE 3: MYNTRA ANALYSIS (BANNER ON TOP + ACCURATE ORDER DATES + RTO CONTROL)
 # ==============================================================================
 def render_myntra_page():
+  """Render Myntra analytics with accurate order_date bounds and filter synchronization."""
   df_all, _ = load_myntra_data(myntra_src)
   if df_all.empty:
     st.warning(
@@ -3056,66 +4977,26 @@ def render_myntra_page():
 
   valid_dates = df_all["order_date_dt"].dropna()
   if valid_dates.empty:
-    st.error("No valid dates found in order_date.")
+    st.error("No valid dates found in Myntra `order_date` / `order_date_dt`.")
     return
 
   min_d = valid_dates.min().date()
   max_d = valid_dates.max().date()
 
-  f1, f2, f3, f4 = st.columns([1.1, 1.0, 1.0, 1.4])
-  with f1:
-    preset = st.selectbox(
-        "📅 Quick Date Preset",
-        [
-            "All Available Dates",
-            "01 Oct – 05 Nov 2026",
-            "01 Jul – 30 Nov 2026",
-            "Custom Dates",
-        ],
-        index=0,
-        key="myn_preset",
-    )
-  if preset == "01 Oct – 05 Nov 2026":
-    init_start = min(max(datetime.date(2026, 10, 1), min_d), max_d)
-    init_end = max(min(datetime.date(2026, 11, 5), max_d), min_d)
-  elif preset == "01 Jul – 30 Nov 2026":
-    init_start = min(max(datetime.date(2026, 7, 1), min_d), max_d)
-    init_end = max(min(datetime.date(2026, 11, 30), max_d), min_d)
-  else:
-    init_start, init_end = min_d, max_d
+  avail_months_myn = sorted(
+      valid_dates.dt.to_period("M").astype(str).unique().tolist(), reverse=True
+  )
+  latest_m_myn = avail_months_myn[0]
+  def_start_myn, def_end_myn = _month_bounds(latest_m_myn, min_d, max_d)
+  _sync_refresh_dates("myntra", min_d, max_d, def_start_myn, def_end_myn)
 
-  all_comb_statuses = sorted(df_all["Combined_Status"].unique().tolist())
-
-  with f2:
-    start_date = st.date_input(
-        "📅 Start Date",
-        value=init_start,
-        min_value=min_d,
-        max_value=max_d,
-        key="myntra_start_date",
-    )
-  with f3:
-    end_date = st.date_input(
-        "📅 End Date",
-        value=init_end,
-        min_value=min_d,
-        max_value=max_d,
-        key="myntra_end_date",
-    )
-  with f4:
-    sel_comb_statuses = st.multiselect(
-        "🔀 Combined Status",
-        all_comb_statuses,
-        default=all_comb_statuses,
-        key="myn_comb",
-    )
-
-  if not sel_comb_statuses:
-    sel_comb_statuses = all_comb_statuses
-
-  if start_date > end_date:
-    st.error("Start Date must be on or before End Date.")
-    return
+  disp_m_start = min(
+      max(st.session_state.get("myntra_start_date", def_start_myn), min_d),
+      max_d,
+  )
+  disp_m_end = min(
+      max(st.session_state.get("myntra_end_date", def_end_myn), min_d), max_d
+  )
 
   _html(f"""
     <div class="exec-banner myntra">
@@ -3123,12 +5004,90 @@ def render_myntra_page():
             {LOGO_BANNER_HTML}
             <div>
                 <div class="exec-title">ARTH LIFE Kids Fashion — Myntra Analysis</div>
-                <div class="exec-sub">Connected to Myntra_Consolidated_Orders.xlsx • Orders Created, Dispatched, RTO, Returns & Net Revenue</div>
+                <div class="exec-sub">Connected to Myntra_Consolidated_Orders.xlsx • Order Dates: {min_d.strftime('%d %b %Y')} to {max_d.strftime('%d %b %Y')}</div>
             </div>
         </div>
-        <div class="exec-pill">📅 Created: {start_date.strftime('%d %b %Y')} — {end_date.strftime('%d %b %Y')}</div>
+        <div class="exec-pill">📅 Order Date: {disp_m_start.strftime('%d %b %Y')} — {disp_m_end.strftime('%d %b %Y')}</div>
     </div>
     """)
+
+  oct_lbl = (
+      "01 Oct –"
+      f" {min(datetime.date(max_d.year, 10, 31), max_d).strftime('%d %b %Y')}"
+  )
+  jul_lbl = f"01 Jul – {max_d.strftime('%d %b %Y')}"
+
+  f1, f2, f3, f4, f5 = st.columns([1.15, 1.05, 0.95, 0.95, 1.35])
+  with f1:
+    sel_m_myn = st.selectbox(
+        "🗓️ Month-wise Filter",
+        options=["Latest Month (" + latest_m_myn + ")"]
+        + avail_months_myn
+        + ["All Available Dates"],
+        index=0,
+        key="myn_month_sel",
+    )
+  with f2:
+    preset = st.selectbox(
+        "📅 Quick Preset",
+        ["Month / Latest", oct_lbl, jul_lbl, "All Available Dates"],
+        index=0,
+        key="myn_preset",
+    )
+
+  if preset == oct_lbl:
+    p_s = min(max(datetime.date(max_d.year, 10, 1), min_d), max_d)
+    p_e = min(max(datetime.date(max_d.year, 10, 31), min_d), max_d)
+  elif preset == jul_lbl:
+    p_s = min(max(datetime.date(max_d.year, 7, 1), min_d), max_d)
+    p_e = max_d
+  elif preset == "All Available Dates" or sel_m_myn == "All Available Dates":
+    p_s, p_e = min_d, max_d
+  else:
+    chosen_m = (
+        latest_m_myn if sel_m_myn.startswith("Latest Month") else sel_m_myn
+    )
+    p_s, p_e = _month_bounds(chosen_m, min_d, max_d)
+
+  p_s = min(max(p_s, min_d), max_d)
+  p_e = min(max(p_e, min_d), max_d)
+
+  if st.session_state.get("_myn_last_choice") != (sel_m_myn, preset):
+    st.session_state["_myn_last_choice"] = (sel_m_myn, preset)
+    st.session_state["myntra_start_date"] = p_s
+    st.session_state["myntra_end_date"] = p_e
+    st.rerun()
+
+  all_comb_statuses = sorted(df_all["Combined_Status"].unique().tolist())
+
+  with f3:
+    start_date = st.date_input(
+        "📅 Start Date",
+        min_value=min_d,
+        max_value=max_d,
+        key="myntra_start_date",
+    )
+  with f4:
+    end_date = st.date_input(
+        "📅 End Date", min_value=min_d, max_value=max_d, key="myntra_end_date"
+    )
+  with f5:
+    sel_comb_statuses = st.multiselect(
+        "🔀 Combined Status",
+        all_comb_statuses,
+        default=all_comb_statuses,
+        key="myn_comb",
+    )
+
+  start_date = min(max(start_date, min_d), max_d)
+  end_date = min(max(end_date, min_d), max_d)
+
+  if not sel_comb_statuses:
+    sel_comb_statuses = all_comb_statuses
+
+  if start_date > end_date:
+    st.error("Start Date must be on or before End Date.")
+    return
 
   p_df = df_all[
       (df_all["order_date_dt"].dt.date >= start_date)
@@ -3140,6 +5099,8 @@ def render_myntra_page():
     st.info(
         "No Myntra orders found between"
         f" {start_date.strftime('%d %b %Y')} and {end_date.strftime('%d %b %Y')}."
+        f" Available Myntra order dates are {min_d.strftime('%d %b %Y')} to"
+        f" {max_d.strftime('%d %b %Y')}."
     )
     return
 
@@ -3169,18 +5130,32 @@ def render_myntra_page():
   rt_l_series = p_df["Return_Type_Clean"]
   st_l_series = p_df["Status_Clean"]
 
-  is_rto_mask = rt_l_series.str.contains(
-      "rto", na=False
-  ) | st_l_series.str.contains("rto", na=False)
+  in_rto_sh = (
+      p_df["_in_rto_returns_sheet"].astype(bool)
+      if "_in_rto_returns_sheet" in p_df.columns
+      else pd.Series([False] * len(p_df), index=p_df.index)
+  )
+  in_ex_sh = (
+      p_df["_in_exchanges_sheet"].astype(bool)
+      if "_in_exchanges_sheet" in p_df.columns
+      else pd.Series([False] * len(p_df), index=p_df.index)
+  )
+
+  is_exch_mask = rt_l_series.str.contains("exchange", na=False) | in_ex_sh
+  is_rto_mask = (~is_exch_mask) & (
+      rt_l_series.str.contains("rto", na=False)
+      | st_l_series.str.contains("rto", na=False)
+      | (in_rto_sh & (~rt_l_series.str.contains("return", na=False)))
+  )
   is_cust_ret_mask = (
       (~is_rto_mask)
-      & (~rt_l_series.str.contains("exchange", na=False))
+      & (~is_exch_mask)
       & (
           rt_l_series.str.contains("return", na=False)
           | st_l_series.str.contains("reverse", na=False)
+          | in_rto_sh
       )
   )
-  is_exch_mask = rt_l_series.str.contains("exchange", na=False)
 
   rto_df = p_df[is_rto_mask].copy()
   cust_ret_df = p_df[is_cust_ret_mask].copy()
@@ -3278,7 +5253,7 @@ def render_myntra_page():
 
   tab1, tab2, tab3, tab4 = st.tabs([
       "📈 Overview & Combined Status",
-      "↩️ RTO & Customer Returns",
+      "↩️ RTO & Exchange Analysis",
       "👗 Article Types & Top SKUs",
       "📋 Orders Table & Download",
   ])
@@ -3319,7 +5294,7 @@ def render_myntra_page():
               y=daily["Orders"],
               name="Unique Orders",
               marker=dict(color="#6366F1", cornerradius=6),
-              opacity=0.85,
+              opacity=0.88,
               text=daily["Orders"],
               textposition="outside",
               cliponaxis=False,
@@ -3338,6 +5313,8 @@ def render_myntra_page():
               y=daily["Rev_Lakhs"],
               name="Revenue (₹ Lakhs)",
               mode="lines+markers",
+              fill="tozeroy",
+              fillcolor="rgba(236, 72, 153, 0.08)",
               line=dict(color="#EC4899", width=3, shape="spline"),
               marker=dict(
                   size=7, color="#FFFFFF", line=dict(width=2.5, color="#EC4899")
@@ -3357,45 +5334,26 @@ def render_myntra_page():
           if not daily.empty
           else 1.0
       )
-      fig_dual.update_layout(
+      _style_fig(
+          fig_dual,
           height=400,
-          margin=dict(l=15, r=15, t=40, b=60),
-          paper_bgcolor="rgba(0,0,0,0)",
-          plot_bgcolor="rgba(0,0,0,0)",
+          margins=dict(l=15, r=15, t=40, b=60),
           hovermode="x unified",
-          bargap=0.28,
-          legend=dict(
-              orientation="h",
-              yanchor="bottom",
-              y=1.04,
-              xanchor="right",
-              x=1,
-              font=dict(size=12),
-          ),
-          font=dict(family="Plus Jakarta Sans", color="#334155"),
       )
+      fig_dual.update_layout(bargap=0.28)
       fig_dual.update_xaxes(
-          tickangle=-45,
-          tickfont=dict(size=11, color="#475569"),
-          nticks=18,
-          showgrid=False,
+          tickangle=-45, tickfont=dict(size=11, color="#475569"), nticks=18
       )
       fig_dual.update_yaxes(
-          title_text="Unique Orders",
-          range=[0, max_ord_y],
-          showgrid=True,
-          gridcolor="#F1F5F9",
-          zeroline=False,
-          secondary_y=False,
+          title_text="Unique Orders", range=[0, max_ord_y], secondary_y=False
       )
       fig_dual.update_yaxes(
           title_text="Revenue (₹ Lakhs)",
           range=[0, max_rev_y],
           showgrid=False,
-          zeroline=False,
           secondary_y=True,
       )
-      st.plotly_chart(fig_dual, use_container_width=True)
+      st.plotly_chart(fig_dual, use_container_width=True, key="my_dual")
 
       _html(
           '<div style="font-size:14px; font-weight:700; color:#0F172A;'
@@ -3425,18 +5383,16 @@ def render_myntra_page():
               cliponaxis=False,
           )
       )
-      fig_comb.update_layout(
+      _style_fig(
+          fig_comb,
           height=260,
-          margin=dict(l=10, r=45, t=15, b=15),
-          paper_bgcolor="rgba(0,0,0,0)",
-          plot_bgcolor="rgba(0,0,0,0)",
-          xaxis=dict(
-              showgrid=True,
-              gridcolor="#F1F5F9",
-              range=[0, max(float(comb_tbl["Unique_Orders"].max()) * 1.25, 3.0)],
-          ),
+          margins=dict(l=10, r=45, t=15, b=15),
+          showlegend=False,
       )
-      st.plotly_chart(fig_comb, use_container_width=True)
+      fig_comb.update_xaxes(
+          range=[0, max(float(comb_tbl["Unique_Orders"].max()) * 1.25, 3.0)]
+      )
+      st.plotly_chart(fig_comb, use_container_width=True, key="my_comb")
       _safe_dataframe(
           comb_tbl, use_container_width=True, height=200, hide_index=True
       )
@@ -3483,32 +5439,26 @@ def render_myntra_page():
               textfont=dict(size=12, color="#0F172A"),
           )
       )
-      fig_fun.update_layout(
+      _style_fig(
+          fig_fun,
           height=400,
-          margin=dict(l=10, r=60, t=20, b=20),
-          paper_bgcolor="rgba(0,0,0,0)",
-          plot_bgcolor="rgba(0,0,0,0)",
-          xaxis=dict(
-              showgrid=True,
-              gridcolor="#F1F5F9",
-              zeroline=False,
-              range=[0, max(funnel_vals + [1]) * 1.22],
-          ),
-          yaxis=dict(showgrid=False, tickfont=dict(size=12)),
-          font=dict(family="Plus Jakarta Sans", color="#334155"),
+          margins=dict(l=10, r=60, t=20, b=20),
+          showlegend=False,
       )
-      st.plotly_chart(fig_fun, use_container_width=True)
+      fig_fun.update_xaxes(range=[0, max(funnel_vals + [1]) * 1.22])
+      fig_fun.update_yaxes(showgrid=False, tickfont=dict(size=12))
+      st.plotly_chart(fig_fun, use_container_width=True, key="my_fun")
       _html("</div>")
 
   with tab2:
-    _html("""
+    _html(f"""
         <div class="sec-header-rto">
-            <div class="sec-title">🚚 Section 1: RTO & Customer Return Analysis</div>
-            <div class="sec-sub">Reverse Status Breakdown & Net Seller Paid Summary</div>
+            <div class="sec-title">🚚 Section 1: Myntra RTO & Customer Return Analysis (RTO: {rto_cnt:,} | Cust Return: {cust_ret_cnt:,})</div>
+            <div class="sec-sub">Reverse Status Donut & Day-Wise RTO + Customer Return Orders Trend</div>
         </div>
         """)
-    rc1, rc2 = st.columns(2)
-    with rc1:
+    s1_mc1, s1_mc2 = st.columns([1.05, 1.45])
+    with s1_mc1:
       _html(
           '<div class="card-box"><div class="card-title">🍩 RTO Reverse'
           " Status (Donut)</div>"
@@ -3519,46 +5469,130 @@ def render_myntra_page():
             .nunique()
             .reset_index(name="Count")
         )
-        fig_rs = go.Figure(
-            go.Pie(
-                labels=r_st["Reverse_Status_Clean"],
-                values=r_st["Count"],
-                hole=0.58,
-                textinfo="percent",
-                textposition="inside",
-                marker=dict(
-                    colors=["#EF4444", "#F97316", "#F59E0B", "#0EA5E9", "#8B5CF6"],
-                    line=dict(color="#FFFFFF", width=2.5),
-                ),
-            )
-        )
-        fig_rs.update_layout(
-            height=340,
-            margin=dict(l=15, r=15, t=20, b=65),
-            paper_bgcolor="rgba(0,0,0,0)",
-            showlegend=True,
-            legend=dict(
-                orientation="h", yanchor="top", y=-0.06, xanchor="center", x=0.5
+        st.plotly_chart(
+            _make_donut_fig(
+                r_st["Reverse_Status_Clean"].tolist(),
+                r_st["Count"].tolist(),
+                ["#EF4444", "#F97316", "#F59E0B", "#0EA5E9", "#8B5CF6"],
+                f"<b>{rto_cnt:,}</b><br>RTO",
             ),
-            annotations=[
-                dict(
-                    text=f"<b>{rto_cnt:,}</b><br>RTO",
-                    x=0.5,
-                    y=0.5,
-                    font_size=13,
-                    showarrow=False,
-                )
-            ],
+            use_container_width=True,
+            key="my_rto_dn",
         )
-        st.plotly_chart(fig_rs, use_container_width=True)
+        _html(
+            f'<div class="viz-info"><b>RTO Impact:</b> <b>{rto_cnt:,}</b>'
+            f" RTO orders ({rto_pct:.1f}% of dispatched) · Seller Value:"
+            f" <b>₹{rto_seller_rev:,.0f}</b>.</div>"
+        )
       else:
         st.info("No RTO orders in selected period.")
       _html("</div>")
 
-    with rc2:
+    with s1_mc2:
       _html(
-          '<div class="card-box"><div class="card-title">🔄 Exchanges &'
-          " Net Seller Paid Summary</div>"
+          '<div class="card-box"><div class="card-title">📅 Day-Wise RTO &'
+          " Customer Return Orders Analysis</div>"
+      )
+      ret_rto_comb_df = p_df[is_rto_mask | is_cust_ret_mask].copy()
+      if (
+          not ret_rto_comb_df.empty
+          and ret_rto_comb_df["order_date_dt"].notna().any()
+      ):
+        d_mr = (
+            ret_rto_comb_df.groupby(ret_rto_comb_df["order_date_dt"].dt.date)[
+                "Unique_Order_Key"
+            ]
+            .nunique()
+            .reset_index(name="Issue_Count")
+            .sort_values("order_date_dt")
+        )
+        d_mr["Date_Lbl"] = pd.to_datetime(d_mr["order_date_dt"]).dt.strftime(
+            "%d %b"
+        )
+        fig_dmr = go.Figure()
+        fig_dmr.add_trace(
+            go.Bar(
+                x=d_mr["Date_Lbl"],
+                y=d_mr["Issue_Count"],
+                name="RTO + Cust Return",
+                marker=dict(color="#FB7185", cornerradius=6),
+                text=d_mr["Issue_Count"],
+                textposition="outside",
+                cliponaxis=False,
+            )
+        )
+        fig_dmr.add_trace(
+            go.Scatter(
+                x=d_mr["Date_Lbl"],
+                y=d_mr["Issue_Count"],
+                name="Trend",
+                mode="lines+markers",
+                fill="tozeroy",
+                fillcolor="rgba(225, 29, 72, 0.08)",
+                line=dict(color="#E11D48", width=2.5, shape="spline"),
+                marker=dict(
+                    size=6.5,
+                    color="#FFFFFF",
+                    line=dict(color="#E11D48", width=2),
+                ),
+            )
+        )
+        _style_fig(
+            fig_dmr,
+            height=370,
+            margins=dict(l=15, r=15, t=25, b=55),
+            showlegend=False,
+            hovermode="x unified",
+        )
+        fig_dmr.update_xaxes(tickangle=-45, nticks=18)
+        fig_dmr.update_yaxes(
+            range=[0, max(float(d_mr["Issue_Count"].max()) * 1.32, 3.0)]
+        )
+        st.plotly_chart(fig_dmr, use_container_width=True, key="my_day_rr")
+        _html(
+            '<div class="viz-info"><b>Customer Returns:</b>'
+            f" <b>{cust_ret_cnt:,}</b> orders ({cust_ret_pct:.1f}%) ·"
+            f" Seller Value: <b>₹{cust_ret_seller_rev:,.0f}</b>.</div>"
+        )
+      else:
+        st.info(
+            "No day-wise RTO or Customer Return orders in selected period."
+        )
+      _html("</div>")
+
+    _html(f"""
+        <div class="sec-header-exch">
+            <div class="sec-title">🔄 Section 2: Myntra Exchange & Net Seller Paid Summary (Exchanges: {exch_cnt:,})</div>
+            <div class="sec-sub">Exchange Orders, Gross vs Deductions & Net Seller Paid Revenue</div>
+        </div>
+        """)
+    s2_mc1, s2_mc2 = st.columns([1.05, 1.45])
+    with s2_mc1:
+      _html(
+          '<div class="card-box"><div class="card-title">🍩 Return & Exchange'
+          " Mix (Donut)</div>"
+      )
+      mix_lbls = ["RTO Orders", "Customer Returns", "Exchanges"]
+      mix_vals = [rto_cnt, cust_ret_cnt, exch_cnt]
+      if sum(mix_vals) > 0:
+        st.plotly_chart(
+            _make_donut_fig(
+                mix_lbls,
+                mix_vals,
+                ["#EF4444", "#EC4899", "#8B5CF6"],
+                f"<b>{sum(mix_vals):,}</b><br>Rev/Exch",
+            ),
+            use_container_width=True,
+            key="my_mix_dn",
+        )
+      else:
+        st.info("No RTO, Return or Exchange counts in selected period.")
+      _html("</div>")
+
+    with s2_mc2:
+      _html(
+          '<div class="card-box"><div class="card-title">💰 Net Seller Paid'
+          " Revenue Summary</div>"
       )
       st.metric("Gross Seller Paid Amount", f"₹{seller_rev:,.2f}")
       st.metric(
@@ -3571,6 +5605,63 @@ def render_myntra_page():
           f" ₹{aov:,.0f}"
       )
       _html("</div>")
+
+    m_ctrl = p_df.copy()
+    m_ctrl["_is_rto"] = is_rto_mask
+    m_ctrl["_is_cret"] = is_cust_ret_mask
+    m_ctrl["_is_exch"] = is_exch_mask
+    m_ctrl["_is_issue"] = is_rto_mask | is_cust_ret_mask | is_exch_mask
+
+    m_sku_grp = (
+        m_ctrl.groupby("SKU_Clean")
+        .agg(
+            Total_Orders=("Unique_Order_Key", "nunique"),
+            RTO_Orders=(
+                "Unique_Order_Key",
+                lambda s: s[m_ctrl.loc[s.index, "_is_rto"]].nunique(),
+            ),
+            Return_Orders=(
+                "Unique_Order_Key",
+                lambda s: s[
+                    m_ctrl.loc[s.index, "_is_cret"]
+                    | m_ctrl.loc[s.index, "_is_exch"]
+                ].nunique(),
+            ),
+            Total_Issue_Orders=(
+                "Unique_Order_Key",
+                lambda s: s[m_ctrl.loc[s.index, "_is_issue"]].nunique(),
+            ),
+        )
+        .reset_index()
+        .rename(columns={"SKU_Clean": "SKU_Code"})
+    )
+    group_col_m = (
+        "Size_Clean" if m_ctrl["Size_Clean"].nunique() > 1 else "Article_Clean"
+    )
+    m_sz_grp = (
+        m_ctrl.groupby(group_col_m)
+        .agg(
+            Orders=("Unique_Order_Key", "nunique"),
+            Issues=(
+                "Unique_Order_Key",
+                lambda s: s[m_ctrl.loc[s.index, "_is_issue"]].nunique(),
+            ),
+        )
+        .reset_index()
+    )
+    _render_rto_return_control_section(
+        sku_df=m_sku_grp,
+        size_df=m_sz_grp,
+        sku_col_name="SKU_Code",
+        size_col_name=group_col_m,
+        rto_col_name="RTO_Orders",
+        ret_col_name="Return_Orders",
+        issue_col_name="Total_Issue_Orders",
+        total_ord_col_name="Total_Orders",
+        start_date=start_date,
+        end_date=end_date,
+        key_prefix="myn",
+    )
 
   with tab3:
     p1, p2 = st.columns([1.2, 1])
@@ -3608,28 +5699,37 @@ def render_myntra_page():
           .reset_index(name="Orders")
           .sort_values("Orders", ascending=False)
       )
+      art_palette = [
+          "#8B5CF6",
+          "#7C3AED",
+          "#6366F1",
+          "#4F46E5",
+          "#0EA5E9",
+          "#06B6D4",
+          "#10B981",
+      ]
       fig_art = go.Figure(
           go.Bar(
               x=art_df["Article_Clean"],
               y=art_df["Orders"],
-              marker=dict(color="#8B5CF6", cornerradius=8),
+              marker=dict(
+                  color=art_palette[: len(art_df)], cornerradius=8
+              ),
               text=art_df["Orders"],
               textposition="outside",
               cliponaxis=False,
           )
       )
-      fig_art.update_layout(
+      _style_fig(
+          fig_art,
           height=310,
-          margin=dict(l=10, r=10, t=25, b=10),
-          paper_bgcolor="rgba(0,0,0,0)",
-          plot_bgcolor="rgba(0,0,0,0)",
-          yaxis=dict(
-              showgrid=True,
-              gridcolor="#F1F5F9",
-              range=[0, max(float(art_df["Orders"].max()) * 1.25, 3.0)],
-          ),
+          margins=dict(l=10, r=10, t=25, b=10),
+          showlegend=False,
       )
-      st.plotly_chart(fig_art, use_container_width=True)
+      fig_art.update_yaxes(
+          range=[0, max(float(art_df["Orders"].max()) * 1.25, 3.0)]
+      )
+      st.plotly_chart(fig_art, use_container_width=True, key="my_art")
       _html("</div>")
 
   with tab4:
@@ -3669,7 +5769,7 @@ def render_myntra_page():
 
 
 # ==============================================================================
-# 9. PAGE 4: NYKAA ANALYSIS (Myntra-aligned logic except KPI Orders)
+# 9. PAGE 4: NYKAA ANALYSIS (BANNER ON TOP + RTO & RETURN CONTROL AT BOTTOM)
 # ==============================================================================
 def render_nykaa_page():
   if nykaa_src is None:
@@ -3687,55 +5787,91 @@ def render_nykaa_page():
   min_d = valid_dates.min().date()
   max_d = valid_dates.max().date()
 
-  f1, f2, f3, f4, f5 = st.columns([1.0, 0.9, 0.9, 1.1, 1.3])
+  avail_months_nyk = sorted(
+      valid_dates.dt.to_period("M").astype(str).unique().tolist(), reverse=True
+  )
+  latest_m_nyk = avail_months_nyk[0]
+  def_end_nyk = _resolve_default_latest_date(min_d, max_d)
+  def_start_nyk, _ = _month_bounds(latest_m_nyk, min_d, def_end_nyk)
+  _sync_refresh_dates("nykaa", min_d, max_d, def_start_nyk, def_end_nyk)
+
+  disp_n_start = st.session_state.get("nykaa_start_date", def_start_nyk)
+  disp_n_end = st.session_state.get("nykaa_end_date", def_end_nyk)
+
+  _html(f"""
+    <div class="exec-banner nykaa">
+        <div class="exec-banner-left">
+            {LOGO_BANNER_HTML}
+            <div>
+                <div class="exec-title">ARTH LIFE Kids Fashion — Nykaa Analysis</div>
+                <div class="exec-sub">Connected to OrderExport (16).xls • Web Orders, RTO/Return Analysis, SKU Control & Net Revenue</div>
+            </div>
+        </div>
+        <div class="exec-pill">📅 Orders: {disp_n_start.strftime('%d %b %Y')} — {disp_n_end.strftime('%d %b %Y')}</div>
+    </div>
+    """)
+
+  f1, f2, f3, f4, f5, f6 = st.columns([1.05, 0.95, 0.85, 0.85, 1.05, 1.2])
   with f1:
+    sel_m_nyk = st.selectbox(
+        "🗓️ Month-wise Filter",
+        options=["Latest Month (" + latest_m_nyk + ")"]
+        + avail_months_nyk
+        + ["All Available Dates"],
+        index=0,
+        key="nyk_month_sel",
+    )
+  with f2:
     preset = st.selectbox(
-        "📅 Quick Date Preset",
+        "📅 Quick Preset",
         [
-            "All Available Dates",
+            "Month / Latest",
             "01 Oct – 31 Oct 2026",
             "01 Jul – 31 Oct 2026",
-            "Custom Dates",
+            "All Available Dates",
         ],
         index=0,
         key="nyk_preset",
     )
   if preset == "01 Oct – 31 Oct 2026":
-    init_start = min(max(datetime.date(2026, 10, 1), min_d), max_d)
-    init_end = max(min(datetime.date(2026, 10, 31), max_d), min_d)
+    p_s = min(max(datetime.date(2026, 10, 1), min_d), max_d)
+    p_e = max(min(datetime.date(2026, 10, 31), max_d), min_d)
   elif preset == "01 Jul – 31 Oct 2026":
-    init_start = min(max(datetime.date(2026, 7, 1), min_d), max_d)
-    init_end = max(min(datetime.date(2026, 10, 31), max_d), min_d)
+    p_s = min(max(datetime.date(2026, 7, 1), min_d), max_d)
+    p_e = max(min(datetime.date(2026, 10, 31), max_d), min_d)
+  elif preset == "All Available Dates" or sel_m_nyk == "All Available Dates":
+    p_s, p_e = min_d, max_d
   else:
-    init_start, init_end = min_d, max_d
+    chosen_m = (
+        latest_m_nyk if sel_m_nyk.startswith("Latest Month") else sel_m_nyk
+    )
+    p_s, p_e = _month_bounds(chosen_m, min_d, max_d)
+
+  if st.session_state.get("_nyk_last_choice") != (sel_m_nyk, preset):
+    st.session_state["_nyk_last_choice"] = (sel_m_nyk, preset)
+    st.session_state["nykaa_start_date"] = p_s
+    st.session_state["nykaa_end_date"] = p_e
+    st.rerun()
 
   all_otypes = sorted(df_all["Order_Type_Clean"].unique().tolist())
   all_statuses = sorted(df_all["Status_Clean"].unique().tolist())
 
-  with f2:
-    start_date = st.date_input(
-        "📅 Start Date",
-        value=init_start,
-        min_value=min_d,
-        max_value=max_d,
-        key="nykaa_start_date",
-    )
   with f3:
-    end_date = st.date_input(
-        "📅 End Date",
-        value=init_end,
-        min_value=min_d,
-        max_value=max_d,
-        key="nykaa_end_date",
+    start_date = st.date_input(
+        "📅 Start Date", min_value=min_d, max_value=max_d, key="nykaa_start_date"
     )
   with f4:
+    end_date = st.date_input(
+        "📅 End Date", min_value=min_d, max_value=max_d, key="nykaa_end_date"
+    )
+  with f5:
     sel_otypes = st.multiselect(
         "💳 Filter Order Type (COD / Prepaid)",
         all_otypes,
         default=all_otypes,
         key="nyk_otypes",
     )
-  with f5:
+  with f6:
     sel_statuses = st.multiselect(
         "📦 Filter Status",
         all_statuses,
@@ -3751,19 +5887,6 @@ def render_nykaa_page():
   if start_date > end_date:
     st.error("Start Date must be on or before End Date.")
     return
-
-  _html(f"""
-    <div class="exec-banner nykaa">
-        <div class="exec-banner-left">
-            {LOGO_BANNER_HTML}
-            <div>
-                <div class="exec-title">ARTH LIFE Kids Fashion — Nykaa Analysis</div>
-                <div class="exec-sub">Connected to OrderExport (16).xls • Nykaa Order Count + Myntra KPI & Revenue Logic</div>
-            </div>
-        </div>
-        <div class="exec-pill">📅 Orders: {start_date.strftime('%d %b %Y')} — {end_date.strftime('%d %b %Y')}</div>
-    </div>
-    """)
 
   p_df = df_all[
       (df_all["Order_Date_dt"].dt.date >= start_date)
@@ -3783,69 +5906,46 @@ def render_nykaa_page():
   tot_rows = len(p_df)
   tot_qty = int(p_df["Qty"].sum())
 
-  st_l_series = p_df["Status_Lower"]
-  is_exch_mask = st_l_series.str.contains("exchange", na=False)
-  is_rto_mask = (~is_exch_mask) & st_l_series.str.contains("rto", na=False)
-  is_cust_ret_mask = (
-      (~is_rto_mask)
-      & (~is_exch_mask)
-      & st_l_series.str.contains("return", na=False)
-  )
-  is_canc_mask = st_l_series == "cancelled"
+  non_canc_df = p_df[p_df["Status_Lower"] != "cancelled"].copy()
+  canc_df = p_df[p_df["Status_Lower"] == "cancelled"].copy()
+  deliv_df = p_df[p_df["Status_Lower"] == "delivered"].copy()
+  shipped_df = p_df[p_df["Status_Lower"] == "shipped"].copy()
+  rto_df = p_df[p_df["Status_Lower"].str.contains("rto", na=False)].copy()
+  ret_df = p_df[
+      (~p_df["Status_Lower"].str.contains("rto", na=False))
+      & (p_df["Status_Lower"].str.contains("return", na=False))
+  ].copy()
 
-  disp_keys = set(
-      p_df[
-          (~is_canc_mask)
-          & (
-              is_rto_mask
-              | is_cust_ret_mask
-              | is_exch_mask
-              | st_l_series.isin(
-                  ["delivered", "shipped", "in_transit", "reverse_in_transit"]
-              )
-          )
-      ]["Order_Key"].dropna()
-  )
-  disp_cnt = min(int(len(disp_keys)), tot_ord)
-
-  rto_df = p_df[is_rto_mask].copy()
-  cust_ret_df = p_df[is_cust_ret_mask].copy()
-  exch_df = p_df[is_exch_mask].copy()
-  deliv_df = p_df[st_l_series == "delivered"].copy()
-
-  rto_cnt = int(rto_df["Order_Key"].nunique()) if not rto_df.empty else 0
-  cust_ret_cnt = (
-      int(cust_ret_df["Order_Key"].nunique()) if not cust_ret_df.empty else 0
-  )
-  exch_cnt = int(exch_df["Order_Key"].nunique()) if not exch_df.empty else 0
   deliv_cnt = int(deliv_df["Order_Key"].nunique()) if not deliv_df.empty else 0
+  shipped_cnt = (
+      int(shipped_df["Order_Key"].nunique()) if not shipped_df.empty else 0
+  )
+  rto_cnt = int(rto_df["Order_Key"].nunique()) if not rto_df.empty else 0
+  ret_cnt = int(ret_df["Order_Key"].nunique()) if not ret_df.empty else 0
+  canc_cnt = int(canc_df["Order_Key"].nunique()) if not canc_df.empty else 0
 
-  non_canc_df = p_df[~is_canc_mask].copy()
   gross_rev = (
       float(non_canc_df["Line Amount"].sum()) if not non_canc_df.empty else 0.0
   )
-  rto_rev = float(rto_df["Line Amount"].sum()) if not rto_df.empty else 0.0
-  cust_ret_rev = (
-      float(cust_ret_df["Line Amount"].sum()) if not cust_ret_df.empty else 0.0
-  )
-  net_rev = max(gross_rev - rto_rev - cust_ret_rev, 0.0)
+  rto_amt = float(rto_df["Line Amount"].sum()) if not rto_df.empty else 0.0
+  ret_amt = float(ret_df["Line Amount"].sum()) if not ret_df.empty else 0.0
+  canc_amt = float(canc_df["Line Amount"].sum()) if not canc_df.empty else 0.0
+  net_rev = max(gross_rev - rto_amt - ret_amt, 0.0)
 
   aov = (
       gross_rev / max(int(non_canc_df["Order_Key"].nunique()), 1)
       if not non_canc_df.empty
       else 0.0
   )
-  rto_pct = (rto_cnt / max(disp_cnt, 1) * 100) if disp_cnt > 0 else 0.0
-  cust_ret_pct = (
-      (cust_ret_cnt / max(disp_cnt, 1) * 100) if disp_cnt > 0 else 0.0
-  )
+  ret_rto_total_cnt = rto_cnt + ret_cnt
+  ret_rto_pct = (ret_rto_total_cnt / max(tot_ord, 1) * 100) if tot_ord > 0 else 0.0
 
   k1, k2, k3, k4, k5 = st.columns(5)
   with k1:
     _html(f"""
         <div class="kpi-card">
             <div>
-                <div class="kpi-lbl">Total Orders Created</div>
+                <div class="kpi-lbl">Unique Orders</div>
                 <div class="kpi-val">{tot_ord:,}</div>
                 <span class="kpi-tag" style="background:#EEF2FF; color:#4F46E5;">{tot_qty:,} Qty ({tot_rows} Rows)</span>
             </div>
@@ -3856,53 +5956,53 @@ def render_nykaa_page():
     _html(f"""
         <div class="kpi-card">
             <div>
-                <div class="kpi-lbl">Order Dispatched</div>
-                <div class="kpi-val">{disp_cnt:,}</div>
-                <span class="kpi-tag" style="background:#ECFEFF; color:#0891B2;">{disp_cnt/max(tot_ord,1)*100:.1f}% Dispatched</span>
+                <div class="kpi-lbl">Gross Revenue (Excl. Canc)</div>
+                <div class="kpi-val">₹{gross_rev:,.2f}</div>
+                <span class="kpi-tag" style="background:#FDF2F8; color:#BE185D;">AOV: ₹{aov:,.0f}</span>
             </div>
-            <div class="kpi-ico" style="background:#ECFEFF;">📦</div>
+            <div class="kpi-ico" style="background:#FDF2F8;">💰</div>
         </div>
         """)
   with k3:
     _html(f"""
         <div class="kpi-card">
             <div>
-                <div class="kpi-lbl">RTO Count</div>
-                <div class="kpi-val">{rto_cnt:,} ({rto_pct:.1f}%)</div>
-                <span class="kpi-tag" style="background:#FEF2F2; color:#DC2626;">₹{rto_rev:,.0f}</span>
+                <div class="kpi-lbl">Net Revenue</div>
+                <div class="kpi-val">₹{net_rev:,.2f}</div>
+                <span class="kpi-tag" style="background:#ECFDF5; color:#059669;">Excl. RTO & Return</span>
             </div>
-            <div class="kpi-ico" style="background:#FEF2F2;">↩️</div>
+            <div class="kpi-ico" style="background:#ECFDF5;">📈</div>
         </div>
         """)
   with k4:
     _html(f"""
         <div class="kpi-card">
             <div>
-                <div class="kpi-lbl">Customer Return Count</div>
-                <div class="kpi-val">{cust_ret_cnt:,} ({cust_ret_pct:.1f}%)</div>
-                <span class="kpi-tag" style="background:#FFF1F2; color:#BE123C;">₹{cust_ret_rev:,.0f}</span>
+                <div class="kpi-lbl">Delivered Orders</div>
+                <div class="kpi-val">{deliv_cnt:,}</div>
+                <span class="kpi-tag" style="background:#ECFDF5; color:#059669;">Shipped: {shipped_cnt:,}</span>
             </div>
-            <div class="kpi-ico" style="background:#FFF1F2;">📥</div>
+            <div class="kpi-ico" style="background:#ECFDF5;">🚚</div>
         </div>
         """)
   with k5:
     _html(f"""
         <div class="kpi-card">
             <div>
-                <div class="kpi-lbl">Net Revenue</div>
-                <div class="kpi-val">₹{net_rev:,.2f}</div>
-                <span class="kpi-tag" style="background:#ECFDF5; color:#059669;">Gross: ₹{gross_rev:,.0f}</span>
+                <div class="kpi-lbl">RTO + Customer Return</div>
+                <div class="kpi-val">{ret_rto_total_cnt:,} ({ret_rto_pct:.1f}%)</div>
+                <span class="kpi-tag" style="background:#FEF2F2; color:#DC2626;">RTO {rto_cnt:,} | Ret {ret_cnt:,}</span>
             </div>
-            <div class="kpi-ico" style="background:#ECFDF5;">💰</div>
+            <div class="kpi-ico" style="background:#FEF2F2;">↩️</div>
         </div>
         """)
 
   st.markdown("<div style='height:18px;'></div>", unsafe_allow_html=True)
 
   tab1, tab2, tab3, tab4 = st.tabs([
-      "📈 Overview & Status Breakdown",
-      "↩️ RTO & Customer Returns",
-      "👗 Top SKUs & Order Types",
+      "📈 Overview & Daily Trend",
+      "↩️ RTO & Exchange Analysis",
+      "👗 Top SKUs & Payment Mix",
       "📋 Orders Table & Download",
   ])
 
@@ -3952,7 +6052,7 @@ def render_nykaa_page():
               y=daily["Orders"],
               name="Unique Orders",
               marker=dict(color="#6366F1", cornerradius=6),
-              opacity=0.85,
+              opacity=0.88,
               text=daily["Orders"],
               textposition="outside",
               cliponaxis=False,
@@ -3971,6 +6071,8 @@ def render_nykaa_page():
               y=daily["Rev_Lakhs"],
               name="Revenue (₹ Lakhs)",
               mode="lines+markers",
+              fill="tozeroy",
+              fillcolor="rgba(236, 72, 153, 0.08)",
               line=dict(color="#EC4899", width=3, shape="spline"),
               marker=dict(
                   size=7, color="#FFFFFF", line=dict(width=2.5, color="#EC4899")
@@ -3990,45 +6092,26 @@ def render_nykaa_page():
           if not daily.empty
           else 1.0
       )
-      fig_dual.update_layout(
+      _style_fig(
+          fig_dual,
           height=400,
-          margin=dict(l=15, r=15, t=40, b=60),
-          paper_bgcolor="rgba(0,0,0,0)",
-          plot_bgcolor="rgba(0,0,0,0)",
+          margins=dict(l=15, r=15, t=40, b=60),
           hovermode="x unified",
-          bargap=0.28,
-          legend=dict(
-              orientation="h",
-              yanchor="bottom",
-              y=1.04,
-              xanchor="right",
-              x=1,
-              font=dict(size=12),
-          ),
-          font=dict(family="Plus Jakarta Sans", color="#334155"),
       )
+      fig_dual.update_layout(bargap=0.28)
       fig_dual.update_xaxes(
-          tickangle=-45,
-          tickfont=dict(size=11, color="#475569"),
-          nticks=18,
-          showgrid=False,
+          tickangle=-45, tickfont=dict(size=11, color="#475569"), nticks=18
       )
       fig_dual.update_yaxes(
-          title_text="Unique Orders",
-          range=[0, max_ord_y],
-          showgrid=True,
-          gridcolor="#F1F5F9",
-          zeroline=False,
-          secondary_y=False,
+          title_text="Unique Orders", range=[0, max_ord_y], secondary_y=False
       )
       fig_dual.update_yaxes(
           title_text="Revenue (₹ Lakhs)",
           range=[0, max_rev_y],
           showgrid=False,
-          zeroline=False,
           secondary_y=True,
       )
-      st.plotly_chart(fig_dual, use_container_width=True)
+      st.plotly_chart(fig_dual, use_container_width=True, key="ny_dual")
       _html("</div>")
 
     with c_right:
@@ -4044,56 +6127,169 @@ def render_nykaa_page():
               f"<b>{tot_ord:,}</b><br>Orders",
           ),
           use_container_width=True,
+          key="ny_dn",
       )
       _html("</div>")
 
   with tab2:
-    _html("""
+    _html(f"""
         <div class="sec-header-rto">
-            <div class="sec-title">🚚 Section 1: RTO & Customer Return Analysis</div>
-            <div class="sec-sub">Status Breakdown & Net Revenue Summary (Myntra Logic)</div>
+            <div class="sec-title">🚚 Section 1: Nykaa RTO & Customer Return Analysis (RTO: {rto_cnt:,} | Cust Return: {ret_cnt:,} | Cancelled: {canc_cnt:,})</div>
+            <div class="sec-sub">Order Status Breakdown & Day-Wise RTO + Return Orders Trend</div>
         </div>
         """)
-    rc1, rc2 = st.columns(2)
-    with rc1:
+    r1, r2, r3 = st.columns(3)
+    r1.metric("RTO Delivered Orders", f"{rto_cnt:,}", f"₹{rto_amt:,.2f}")
+    r2.metric("Customer Returned Orders", f"{ret_cnt:,}", f"₹{ret_amt:,.2f}")
+    r3.metric("Cancelled Orders", f"{canc_cnt:,}", f"₹{canc_amt:,.2f}")
+
+    n_s1_l, n_s1_r = st.columns([1.05, 1.45])
+    with n_s1_l:
       _html(
-          '<div class="card-box"><div class="card-title">🍩 Order Status'
-          " Breakdown (Donut)</div>"
+          '<div class="card-box"><div class="card-title">🍩 Status Mix'
+          " (Donut)</div>"
       )
       st.plotly_chart(
           _make_donut_fig(
               st_tbl["Status_Clean"].tolist(),
               st_tbl["Unique_Orders"].tolist(),
               ["#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#0EA5E9"],
-              f"<b>{rto_cnt + cust_ret_cnt:,}</b><br>Ret/RTO",
+              f"<b>{tot_ord:,}</b><br>Orders",
           ),
           use_container_width=True,
+          key="ny_s1_dn",
       )
       _html("</div>")
 
-    with rc2:
+    with n_s1_r:
       _html(
-          '<div class="card-box"><div class="card-title">🔄 Exchanges &'
-          " Net Revenue Summary</div>"
+          '<div class="card-box"><div class="card-title">📅 Day-Wise RTO &'
+          " Customer Return Trend</div>"
       )
-      st.metric("Gross Revenue (Excl. Cancelled)", f"₹{gross_rev:,.2f}")
-      st.metric(
-          "Less: RTO + Customer Return Amount",
-          f"₹{(rto_rev + cust_ret_rev):,.2f}",
-      )
-      st.metric("Net Revenue", f"₹{net_rev:,.2f}")
-      st.caption(
-          f"Delivered Orders: {deliv_cnt:,} | Exchanges: {exch_cnt:,} | AOV:"
-          f" ₹{aov:,.0f}"
-      )
+      ny_rr_df = p_df[
+          p_df["Status_Lower"].str.contains("rto|return", na=False)
+      ].copy()
+      if not ny_rr_df.empty and ny_rr_df["Order_Date_dt"].notna().any():
+        d_nr = (
+            ny_rr_df.groupby(ny_rr_df["Order_Date_dt"].dt.date)["Order_Key"]
+            .nunique()
+            .reset_index(name="Return_Count")
+            .sort_values("Order_Date_dt")
+        )
+        d_nr["Date_Lbl"] = pd.to_datetime(d_nr["Order_Date_dt"]).dt.strftime(
+            "%d %b"
+        )
+        fig_dnr = go.Figure()
+        fig_dnr.add_trace(
+            go.Bar(
+                x=d_nr["Date_Lbl"],
+                y=d_nr["Return_Count"],
+                name="RTO + Return",
+                marker=dict(color="#FB7185", cornerradius=6),
+                text=d_nr["Return_Count"],
+                textposition="outside",
+                cliponaxis=False,
+            )
+        )
+        fig_dnr.add_trace(
+            go.Scatter(
+                x=d_nr["Date_Lbl"],
+                y=d_nr["Return_Count"],
+                name="Trend",
+                mode="lines+markers",
+                fill="tozeroy",
+                fillcolor="rgba(225, 29, 72, 0.08)",
+                line=dict(color="#E11D48", width=2.5, shape="spline"),
+                marker=dict(
+                    size=6.5,
+                    color="#FFFFFF",
+                    line=dict(color="#E11D48", width=2),
+                ),
+            )
+        )
+        _style_fig(
+            fig_dnr,
+            height=370,
+            margins=dict(l=15, r=15, t=25, b=55),
+            showlegend=False,
+            hovermode="x unified",
+        )
+        fig_dnr.update_xaxes(tickangle=-45, nticks=18)
+        fig_dnr.update_yaxes(
+            range=[0, max(float(d_nr["Return_Count"].max()) * 1.32, 3.0)]
+        )
+        st.plotly_chart(fig_dnr, use_container_width=True, key="ny_s1_day_rr")
+      else:
+        st.info(
+            "No day-wise RTO or Customer Return records in selected period."
+        )
       _html("</div>")
 
+    _html("""
+        <div class="sec-header-exch">
+            <div class="sec-title">🔄 Section 2: Nykaa Status Summary & Net Revenue Impact</div>
+            <div class="sec-sub">Status-wise Orders, Quantity & Line Amount Impact</div>
+        </div>
+        """)
     _html(
-        '<div class="card-box"><div class="card-title">📋 Status-Wise'
-        " Summary Table</div>"
+        '<div class="card-box"><div class="card-title">📋 Status-Wise Summary'
+        " Table</div>"
     )
-    _safe_dataframe(st_tbl, use_container_width=True, height=220, hide_index=True)
+    _safe_dataframe(st_tbl, use_container_width=True, height=230, hide_index=True)
     _html("</div>")
+
+    n_ctrl = non_canc_df.copy()
+    n_ctrl["_is_rto"] = n_ctrl["Status_Lower"].str.contains("rto", na=False)
+    n_ctrl["_is_ret"] = (~n_ctrl["_is_rto"]) & n_ctrl["Status_Lower"].str.contains(
+        "return", na=False
+    )
+    n_ctrl["_is_issue"] = n_ctrl["_is_rto"] | n_ctrl["_is_ret"]
+
+    n_sku_grp = (
+        n_ctrl.groupby("SKU_Code_Clean")
+        .agg(
+            Total_Orders=("Order_Key", "nunique"),
+            RTO_Orders=(
+                "Order_Key",
+                lambda s: s[n_ctrl.loc[s.index, "_is_rto"]].nunique(),
+            ),
+            Return_Orders=(
+                "Order_Key",
+                lambda s: s[n_ctrl.loc[s.index, "_is_ret"]].nunique(),
+            ),
+            Total_Issue_Orders=(
+                "Order_Key",
+                lambda s: s[n_ctrl.loc[s.index, "_is_issue"]].nunique(),
+            ),
+        )
+        .reset_index()
+        .rename(columns={"SKU_Code_Clean": "SKU_Code"})
+    )
+    n_sz = (
+        n_ctrl[n_ctrl["Size_Clean"] != "Unspecified"]
+        .groupby("Size_Clean")
+        .agg(
+            Orders=("Order_Key", "nunique"),
+            Issues=(
+                "Order_Key",
+                lambda s: s[n_ctrl.loc[s.index, "_is_issue"]].nunique(),
+            ),
+        )
+        .reset_index()
+    )
+    _render_rto_return_control_section(
+        sku_df=n_sku_grp,
+        size_df=n_sz,
+        sku_col_name="SKU_Code",
+        size_col_name="Size_Clean",
+        rto_col_name="RTO_Orders",
+        ret_col_name="Return_Orders",
+        issue_col_name="Total_Issue_Orders",
+        total_ord_col_name="Total_Orders",
+        start_date=start_date,
+        end_date=end_date,
+        key_prefix="nyk",
+    )
 
   with tab3:
     t1, t2 = st.columns([1.3, 1])
@@ -4181,27 +6377,17 @@ def render_nykaa_page():
     )
 
 
-def _run_page_safely(page_name: str, render_fn):
-  """Render a dashboard page safely so runtime errors never leave a blank screen."""
-  try:
-    render_fn()
-  except Exception as exc:
-    st.error(f"Error rendering **{page_name}**: `{type(exc).__name__}: {exc}`")
-    with st.expander("🔍 Technical Traceback Details"):
-      import traceback
-
-      st.code(traceback.format_exc(), language="python")
-
-
 # ==============================================================================
 # 10. INDIVIDUAL PAGE ROUTER
 # ==============================================================================
 page_now = st.session_state["active_page"]
 if page_now == "📊 Daily Analysis":
-  _run_page_safely(page_now, render_daily_page)
+  render_daily_page()
 elif page_now == "👗 Shopify Analysis":
-  _run_page_safely(page_now, render_shopify_page)
+  render_shopify_page()
+elif page_now == "🔮 Shopify Forecast":
+  render_shopify_forecast_page()
 elif page_now == "🛍️ Myntra Analysis":
-  _run_page_safely(page_now, render_myntra_page)
+  render_myntra_page()
 elif page_now == "💄 Nykaa Analysis":
-  _run_page_safely(page_now, render_nykaa_page)
+  render_nykaa_page()
