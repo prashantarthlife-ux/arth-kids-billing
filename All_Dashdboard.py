@@ -3841,8 +3841,117 @@ def render_shopify_forecast_page():
 # ==============================================================================
 # 8. PAGE 3: MYNTRA ANALYSIS (BANNER ON TOP + ACCURATE ORDER DATES + RTO CONTROL)
 # ==============================================================================
+def _pct_change_str(cur_val: float, prev_val: float) -> str:
+    """Compute percentage change between current and previous period values."""
+    if prev_val > 0:
+        pct = ((cur_val - prev_val) / prev_val) * 100.0
+        return f"{pct:+.1f}%"
+    if cur_val > 0:
+        return "+100.0%"
+    return "0.0%"
+
+
+def _render_seven_kpis_block(
+    tot_ord: int,
+    prev_m_ord: int,
+    gross_rev: float,
+    deliv_cnt: int,
+    net_rev: float,
+    tot_ret_cnt: int,
+    cust_ret_cnt: int,
+    rto_cnt: int,
+    exch_cnt: int,
+):
+    """Render the exact 7 requested KPIs in two compact rows (no extra KPIs)."""
+    ord_vs_prev_pct = _pct_change_str(tot_ord, prev_m_ord)
+    ord_diff = tot_ord - prev_m_ord
+
+    r1_1, r1_2, r1_3, r1_4 = st.columns(4)
+    with r1_1:
+        _html(f"""
+        <div class="kpi-card">
+            <div>
+                <div class="kpi-lbl">1. Total Orders (vs Prev Month)</div>
+                <div class="kpi-val">{tot_ord:,}</div>
+                <span class="kpi-tag" style="background:#EEF2FF; color:#4F46E5;">Prev Mo: {prev_m_ord:,} ({ord_diff:+d} | {ord_vs_prev_pct})</span>
+            </div>
+            <div class="kpi-ico" style="background:#EEF2FF;">🛍️</div>
+        </div>
+        """)
+    with r1_2:
+        _html(f"""
+        <div class="kpi-card">
+            <div>
+                <div class="kpi-lbl">2. Gross Revenue</div>
+                <div class="kpi-val">₹{gross_rev:,.2f}</div>
+                <span class="kpi-tag" style="background:#F5F3FF; color:#7C3AED;">Gross Sales</span>
+            </div>
+            <div class="kpi-ico" style="background:#F5F3FF;">💰</div>
+        </div>
+        """)
+    with r1_3:
+        _html(f"""
+        <div class="kpi-card">
+            <div>
+                <div class="kpi-lbl">3. Unique Delivered</div>
+                <div class="kpi-val">{deliv_cnt:,}</div>
+                <span class="kpi-tag" style="background:#ECFDF5; color:#059669;">Delivered Orders</span>
+            </div>
+            <div class="kpi-ico" style="background:#ECFDF5;">🚚</div>
+        </div>
+        """)
+    with r1_4:
+        _html(f"""
+        <div class="kpi-card">
+            <div>
+                <div class="kpi-lbl">4. Net Revenue</div>
+                <div class="kpi-val">₹{net_rev:,.2f}</div>
+                <span class="kpi-tag" style="background:#ECFDF5; color:#059669;">After RTO & Return</span>
+            </div>
+            <div class="kpi-ico" style="background:#ECFDF5;">📈</div>
+        </div>
+        """)
+
+    st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+
+    r2_1, r2_2, r2_3 = st.columns(3)
+    with r2_1:
+        _html(f"""
+        <div class="kpi-card">
+            <div>
+                <div class="kpi-lbl">5. Total Return Display</div>
+                <div class="kpi-val">{tot_ret_cnt:,}</div>
+                <span class="kpi-tag" style="background:#FEF2F2; color:#DC2626;">All Returns</span>
+            </div>
+            <div class="kpi-ico" style="background:#FEF2F2;">↩️</div>
+        </div>
+        """)
+    with r2_2:
+        _html(f"""
+        <div class="kpi-card">
+            <div>
+                <div class="kpi-lbl">6. Customer Return / RTO Return</div>
+                <div class="kpi-val">{cust_ret_cnt:,} / {rto_cnt:,}</div>
+                <span class="kpi-tag" style="background:#FFF1F2; color:#BE123C;">Cust Ret: {cust_ret_cnt:,} · RTO: {rto_cnt:,}</span>
+            </div>
+            <div class="kpi-ico" style="background:#FFF1F2;">📥</div>
+        </div>
+        """)
+    with r2_3:
+        _html(f"""
+        <div class="kpi-card">
+            <div>
+                <div class="kpi-lbl">7. Total Exchange</div>
+                <div class="kpi-val">{exch_cnt:,}</div>
+                <span class="kpi-tag" style="background:#F5F3FF; color:#7C3AED;">Exchange Orders</span>
+            </div>
+            <div class="kpi-ico" style="background:#F5F3FF;">🔄</div>
+        </div>
+        """)
+
+
 def render_myntra_page():
-    """Render Myntra analytics with Shopify-aligned 10 KPIs and order-creation month cohort tracking."""
+    """Render Myntra analytics with the 7 requested KPIs and order-creation month cohort tracking."""
     df_all, _ = load_myntra_data(myntra_src)
     if df_all.empty:
         st.warning(f"File `{MYNTRA_CONSOLIDATED_NAME}` was not found in GitHub or upload panel.")
@@ -3870,7 +3979,7 @@ def render_myntra_page():
             {LOGO_BANNER_HTML}
             <div>
                 <div class="exec-title">ARTH LIFE Kids Fashion — Myntra Analysis</div>
-                <div class="exec-sub">Order-Creation Month Cohort (RTO/Return/Exchange attributed to Order Date) • Shopify-Aligned KPIs</div>
+                <div class="exec-sub">Order-Creation Month Cohort (RTO/Return/Exchange attributed to Order Date)</div>
             </div>
         </div>
         <div class="exec-pill">📅 Created: {disp_m_start.strftime('%d %b %Y')} — {disp_m_end.strftime('%d %b %Y')}</div>
@@ -3945,6 +4054,15 @@ def render_myntra_page():
         & (df_all["Combined_Status"].isin(sel_comb_statuses))
     ].copy()
 
+    # Previous calendar month orders based on end_date's month (for "Total orders compare with previous month")
+    cur_ym_period = pd.Period(end_date, freq="M")
+    prev_ym_period = cur_ym_period - 1
+    prev_month_df = df_all[
+        (df_all["order_date_dt"].dt.to_period("M") == prev_ym_period)
+        & (df_all["Combined_Status"].isin(sel_comb_statuses))
+    ].copy()
+    prev_m_ord = int(prev_month_df["Unique_Order_Key"].nunique()) if not prev_month_df.empty else 0
+
     if p_df.empty:
         st.info(
             f"No Myntra orders found between {start_date.strftime('%d %b %Y')} and {end_date.strftime('%d %b %Y')}. "
@@ -4010,145 +4128,39 @@ def render_myntra_page():
 
     rto_cnt = int(rto_df["Unique_Order_Key"].nunique()) if not rto_df.empty else 0
     cust_ret_cnt = int(cust_ret_df["Unique_Order_Key"].nunique()) if not cust_ret_df.empty else 0
+    exch_all_cnt = int(exch_df["Unique_Order_Key"].nunique()) if not exch_df.empty else 0
     exch_cnt = int(exch_active_df["Unique_Order_Key"].nunique()) if not exch_active_df.empty else 0
     canc_exch_cnt = int(exch_canc_df["Unique_Order_Key"].nunique()) if not exch_canc_df.empty else 0
     deliv_cnt = int(deliv_df["Unique_Order_Key"].nunique()) if not deliv_df.empty else 0
 
     tot_ret_cnt = rto_cnt + cust_ret_cnt + canc_exch_cnt
-    tot_ret_pct = (tot_ret_cnt / disp_cnt * 100.0) if disp_cnt > 0 else 0.0
-    deliv_pct = (deliv_cnt / disp_cnt * 100.0) if disp_cnt > 0 else 0.0
-
     gross_rev = float(p_df["seller_paid_amount"].sum())
-    tot_disc = float(p_df["discount_amount"].sum()) if "discount_amount" in p_df.columns else 0.0
-    tot_ship = float(p_df["delivery_charges"].sum()) if "delivery_charges" in p_df.columns else 0.0
 
-    affected_ret_keys = set(rto_df["Unique_Order_Key"]).union(set(cust_ret_df["Unique_Order_Key"])).union(set(exch_canc_df["Unique_Order_Key"]))
-    tot_ret_amt = float(p_df[p_df["Unique_Order_Key"].isin(affected_ret_keys)]["seller_paid_amount"].sum()) if affected_ret_keys else 0.0
+    affected_ret_keys = (
+        set(rto_df["Unique_Order_Key"])
+        .union(set(cust_ret_df["Unique_Order_Key"]))
+        .union(set(exch_canc_df["Unique_Order_Key"]))
+    )
+    tot_ret_amt = (
+        float(p_df[p_df["Unique_Order_Key"].isin(affected_ret_keys)]["seller_paid_amount"].sum())
+        if affected_ret_keys
+        else 0.0
+    )
     net_rev = max(gross_rev - tot_ret_amt, 0.0)
     realized_deliv_rev = float(deliv_df["seller_paid_amount"].sum()) if not deliv_df.empty else 0.0
     aov = gross_rev / tot_ord if tot_ord > 0 else 0.0
 
-    rto_pending_hub_df = rto_df[st_l_series != "delivered"].copy() if not rto_df.empty else pd.DataFrame()
-    rto_hub_parcels = len(rto_pending_hub_df)
-    rto_hub_orders = int(rto_pending_hub_df["Unique_Order_Key"].nunique()) if not rto_pending_hub_df.empty else 0
-
-    # Row 1: Shopify-aligned Financial KPIs
-    k1, k2, k3, k4, k5 = st.columns(5)
-    with k1:
-        _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">Unique Orders</div>
-                <div class="kpi-val">{tot_ord:,}</div>
-                <span class="kpi-tag" style="background:#EEF2FF; color:#4F46E5;">{tot_rows:,} Items</span>
-            </div>
-            <div class="kpi-ico" style="background:#EEF2FF;">🛍️</div>
-        </div>
-        """)
-    with k2:
-        _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">Gross Revenue</div>
-                <div class="kpi-val">₹{gross_rev:,.2f}</div>
-                <span class="kpi-tag" style="background:#F5F3FF; color:#7C3AED;">AOV: ₹{aov:,.0f}</span>
-            </div>
-            <div class="kpi-ico" style="background:#F5F3FF;">💰</div>
-        </div>
-        """)
-    with k3:
-        _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">Net Revenue</div>
-                <div class="kpi-val">₹{net_rev:,.2f}</div>
-                <span class="kpi-tag" style="background:#ECFDF5; color:#059669;">Delivered: ₹{realized_deliv_rev:,.0f}</span>
-            </div>
-            <div class="kpi-ico" style="background:#ECFDF5;">📈</div>
-        </div>
-        """)
-    with k4:
-        _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">Total Discount</div>
-                <div class="kpi-val">₹{tot_disc:,.2f}</div>
-                <span class="kpi-tag" style="background:#FDF2F8; color:#BE185D;">{tot_disc/max(gross_rev+tot_disc,1)*100:.1f}% Disc. Share</span>
-            </div>
-            <div class="kpi-ico" style="background:#FDF2F8;">🏷️</div>
-        </div>
-        """)
-    with k5:
-        _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">Total Shipping Cost</div>
-                <div class="kpi-val">₹{tot_ship:,.2f}</div>
-                <span class="kpi-tag" style="background:#ECFEFF; color:#0891B2;">Avg: ₹{tot_ship/max(tot_ord,1):,.1f}/Order</span>
-            </div>
-            <div class="kpi-ico" style="background:#ECFEFF;">🚢</div>
-        </div>
-        """)
-
-    st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
-
-    # Row 2: Shopify-aligned Operational & Return KPIs
-    f1, f2, f3, f4, f5 = st.columns(5)
-    with f1:
-        _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">Unique Dispatched</div>
-                <div class="kpi-val">{disp_cnt:,}</div>
-                <span class="kpi-tag" style="background:#ECFEFF; color:#0891B2;">{disp_cnt/max(tot_ord,1)*100:.1f}% of Orders</span>
-            </div>
-            <div class="kpi-ico" style="background:#ECFEFF;">📦</div>
-        </div>
-        """)
-    with f2:
-        _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">Unique Delivered</div>
-                <div class="kpi-val">{deliv_cnt:,}</div>
-                <span class="kpi-tag" style="background:#ECFDF5; color:#059669;">▲ {deliv_pct:.1f}% Success</span>
-            </div>
-            <div class="kpi-ico" style="background:#ECFDF5;">🚚</div>
-        </div>
-        """)
-    with f3:
-        _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">Total Returns Display</div>
-                <div class="kpi-val">{tot_ret_cnt:,} ({tot_ret_pct:.2f}%)</div>
-                <span class="kpi-tag" style="background:#FEF2F2; color:#DC2626;">RTO {rto_cnt:,} + Ret {cust_ret_cnt:,} + Canc {canc_exch_cnt:,}</span>
-            </div>
-            <div class="kpi-ico" style="background:#FEF2F2;">↩️</div>
-        </div>
-        """)
-    with f4:
-        _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">Pure RTO / Exch Canc</div>
-                <div class="kpi-val">{rto_cnt:,} / {canc_exch_cnt:,}</div>
-                <span class="kpi-tag" style="background:#FFF1F2; color:#BE123C;">Active Exch: {exch_cnt:,}</span>
-            </div>
-            <div class="kpi-ico" style="background:#FFF1F2;">🔄</div>
-        </div>
-        """)
-    with f5:
-        _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">RTO Pending Hub</div>
-                <div class="kpi-val">{rto_hub_parcels:,}</div>
-                <span class="kpi-tag" style="background:#FFF7ED; color:#C2410C;">{rto_hub_orders:,} Unique Orders</span>
-            </div>
-            <div class="kpi-ico" style="background:#FFF7ED;">🏭</div>
-        </div>
-        """)
+    _render_seven_kpis_block(
+        tot_ord=tot_ord,
+        prev_m_ord=prev_m_ord,
+        gross_rev=gross_rev,
+        deliv_cnt=deliv_cnt,
+        net_rev=net_rev,
+        tot_ret_cnt=tot_ret_cnt,
+        cust_ret_cnt=cust_ret_cnt,
+        rto_cnt=rto_cnt,
+        exch_cnt=exch_all_cnt,
+    )
 
     st.markdown("<div style='height:18px;'></div>", unsafe_allow_html=True)
 
@@ -4250,8 +4262,8 @@ def render_myntra_page():
 
         with c_right:
             _html('<div class="card-box"><div class="card-title">🎯 Order & Return Funnel (Unique Orders)</div>')
-            funnel_labels = ["Orders Created", "Dispatched", "Delivered", "Customer Returns", "RTO Count", "Exchanges"]
-            funnel_vals = [tot_ord, disp_cnt, deliv_cnt, cust_ret_cnt, rto_cnt, exch_cnt]
+            funnel_labels = ["Orders Created", "Dispatched", "Delivered", "Customer Returns", "RTO Count", "Total Exchange"]
+            funnel_vals = [tot_ord, disp_cnt, deliv_cnt, cust_ret_cnt, rto_cnt, exch_all_cnt]
             funnel_colors = ["#4F46E5", "#0EA5E9", "#10B981", "#E11D48", "#EF4444", "#8B5CF6"]
             fig_fun = go.Figure(
                 go.Bar(
@@ -4293,6 +4305,8 @@ def render_myntra_page():
                     use_container_width=True,
                     key="my_rto_dn",
                 )
+                rto_seller_rev = float(rto_df["seller_paid_amount"].sum())
+                rto_pct = (rto_cnt / max(disp_cnt, 1) * 100.0) if disp_cnt > 0 else 0.0
                 _html(f'<div class="viz-info"><b>RTO Impact (Order Cohort):</b> <b>{rto_cnt:,}</b> RTO orders ({rto_pct:.1f}% of dispatched) · Seller Value: <b>₹{rto_seller_rev:,.0f}</b>.</div>')
             else:
                 st.info("No RTO orders in selected order date period.")
@@ -4337,6 +4351,8 @@ def render_myntra_page():
                 fig_dmr.update_xaxes(tickangle=-45, nticks=18)
                 fig_dmr.update_yaxes(range=[0, max(float(d_mr["Issue_Count"].max()) * 1.32, 3.0)])
                 st.plotly_chart(fig_dmr, use_container_width=True, key="my_day_rr")
+                cust_ret_seller_rev = float(cust_ret_df["seller_paid_amount"].sum()) if not cust_ret_df.empty else 0.0
+                cust_ret_pct = (cust_ret_cnt / max(disp_cnt, 1) * 100.0) if disp_cnt > 0 else 0.0
                 _html(f'<div class="viz-info"><b>Customer Returns (Order Cohort):</b> <b>{cust_ret_cnt:,}</b> orders ({cust_ret_pct:.1f}%) · Seller Value: <b>₹{cust_ret_seller_rev:,.0f}</b>.</div>')
             else:
                 st.info("No day-wise RTO or Customer Return orders in selected order date period.")
@@ -4344,7 +4360,7 @@ def render_myntra_page():
 
         _html(f"""
         <div class="sec-header-exch">
-            <div class="sec-title">🔄 Section 2: Myntra Exchange Orders by Order Date & Net Revenue (Active Exch: {exch_cnt:,} | Exch Canc: {canc_exch_cnt:,})</div>
+            <div class="sec-title">🔄 Section 2: Myntra Exchange Orders by Order Date & Net Revenue (Total Exch: {exch_all_cnt:,} | Active: {exch_cnt:,} | Exch Canc: {canc_exch_cnt:,})</div>
             <div class="sec-sub">Day-Wise Exchange Orders plotted by Original Order Date + Net Revenue Summary</div>
         </div>
         """)
@@ -4394,7 +4410,7 @@ def render_myntra_page():
         with s2_mc2:
             _html('<div class="card-box"><div class="card-title">💰 Net Revenue Summary</div>')
             st.metric("Gross Revenue", f"₹{gross_rev:,.2f}")
-            st.metric("Less: RTO + Return + Cancelled Exch", f"₹{tot_ret_amt:,.2f}")
+            st.metric("Less: RTO + Return + Cancelled Exch", f"₹{(gross_rev - net_rev):,.2f}")
             st.metric("Net Revenue", f"₹{net_rev:,.2f}")
             st.caption(f"Delivered Revenue: ₹{realized_deliv_rev:,.0f} | AOV: ₹{aov:,.0f}")
             _html("</div>")
@@ -4402,7 +4418,7 @@ def render_myntra_page():
         m_ctrl = p_df.copy()
         m_ctrl["_is_rto"] = is_rto_mask
         m_ctrl["_is_cret"] = is_cust_ret_mask
-        m_ctrl["_is_exch"] = is_exch_all_mask
+        m_ctrl["_is_exch"] = is_exch_mask
         m_ctrl["_is_issue"] = is_rto_mask | is_cust_ret_mask | is_exch_canc_mask
 
         m_sku_grp = (
@@ -4507,7 +4523,7 @@ def render_myntra_page():
 
 
 def render_nykaa_page():
-    """Render Nykaa analytics with Shopify-aligned 10 KPIs and order-creation month cohort tracking."""
+    """Render Nykaa analytics with the 7 requested KPIs and order-creation month cohort tracking."""
     if nykaa_src is None:
         st.warning(f"File `{NYKAA_DEFAULT_NAME}` was not found in GitHub or upload panel.")
         return
@@ -4536,7 +4552,7 @@ def render_nykaa_page():
             {LOGO_BANNER_HTML}
             <div>
                 <div class="exec-title">ARTH LIFE Kids Fashion — Nykaa Analysis</div>
-                <div class="exec-sub">Order-Creation Month Cohort (RTO/Return attributed to Order Date) • Shopify-Aligned KPIs</div>
+                <div class="exec-sub">Order-Creation Month Cohort (RTO/Return/Exchange attributed to Order Date)</div>
             </div>
         </div>
         <div class="exec-pill">📅 Created: {disp_n_start.strftime('%d %b %Y')} — {disp_n_end.strftime('%d %b %Y')}</div>
@@ -4597,7 +4613,7 @@ def render_nykaa_page():
         st.error("Start Date must be on or before End Date.")
         return
 
-    # Filter strictly by Order_Date_dt (order creation date) so returns/RTO stay in the order's creation month
+    # Filter strictly by Order_Date_dt (order creation date) so returns/RTO/exchanges stay in the order's creation month
     p_df = df_all[
         (df_all["Order_Date_dt"].dt.date >= start_date)
         & (df_all["Order_Date_dt"].dt.date <= end_date)
@@ -4605,167 +4621,56 @@ def render_nykaa_page():
         & (df_all["Status_Clean"].isin(sel_statuses))
     ].copy()
 
+    # Previous calendar month orders based on end_date's month (for "Total orders compare with previous month")
+    cur_ym_period_n = pd.Period(end_date, freq="M")
+    prev_ym_period_n = cur_ym_period_n - 1
+    prev_month_df_n = df_all[
+        (df_all["Order_Date_dt"].dt.to_period("M") == prev_ym_period_n)
+        & (df_all["Order_Type_Clean"].isin(sel_otypes))
+        & (df_all["Status_Clean"].isin(sel_statuses))
+    ].copy()
+    prev_m_ord_n = int(prev_month_df_n["Order_Key"].nunique()) if not prev_month_df_n.empty else 0
+
     if p_df.empty:
         st.info(f"No Nykaa orders found between {start_date.strftime('%d %b %Y')} and {end_date.strftime('%d %b %Y')}.")
         return
 
     tot_ord = int(p_df["Order_Key"].nunique())
     tot_rows = len(p_df)
-    tot_qty = int(p_df["Qty"].sum())
 
     non_canc_df = p_df[p_df["Status_Lower"] != "cancelled"].copy()
     canc_df = p_df[p_df["Status_Lower"] == "cancelled"].copy()
     deliv_df = p_df[p_df["Status_Lower"] == "delivered"].copy()
-    shipped_df = p_df[p_df["Status_Lower"] == "shipped"].copy()
     rto_df = p_df[p_df["Status_Lower"].str.contains("rto", na=False)].copy()
     ret_df = p_df[
         (~p_df["Status_Lower"].str.contains("rto", na=False)) & (p_df["Status_Lower"].str.contains("return", na=False))
     ].copy()
+    exch_df = p_df[p_df["Status_Lower"].str.contains("exchange", na=False)].copy()
 
     deliv_cnt = int(deliv_df["Order_Key"].nunique()) if not deliv_df.empty else 0
-    shipped_cnt = int(shipped_df["Order_Key"].nunique()) if not shipped_df.empty else 0
-    disp_cnt = int(p_df[p_df["Status_Lower"].isin(["delivered", "shipped", "returned", "rto delivered"])]["Order_Key"].nunique()) if not p_df.empty else 0
-
     rto_cnt = int(rto_df["Order_Key"].nunique()) if not rto_df.empty else 0
-    ret_cnt = int(ret_df["Order_Key"].nunique()) if not ret_df.empty else 0
+    cust_ret_cnt = int(ret_df["Order_Key"].nunique()) if not ret_df.empty else 0
     canc_cnt = int(canc_df["Order_Key"].nunique()) if not canc_df.empty else 0
-    exch_cnt = int(p_df[p_df["Status_Lower"].str.contains("exchange", na=False)]["Order_Key"].nunique()) if not p_df.empty else 0
+    exch_cnt = int(exch_df["Order_Key"].nunique()) if not exch_df.empty else 0
 
-    tot_ret_cnt = rto_cnt + ret_cnt
-    tot_ret_pct = (tot_ret_cnt / disp_cnt * 100.0) if disp_cnt > 0 else 0.0
-    deliv_pct = (deliv_cnt / disp_cnt * 100.0) if disp_cnt > 0 else 0.0
-
+    tot_ret_cnt = rto_cnt + cust_ret_cnt
     gross_rev = float(non_canc_df["Line Amount"].sum()) if not non_canc_df.empty else 0.0
     rto_amt = float(rto_df["Line Amount"].sum()) if not rto_df.empty else 0.0
     ret_amt = float(ret_df["Line Amount"].sum()) if not ret_df.empty else 0.0
     canc_amt = float(canc_df["Line Amount"].sum()) if not canc_df.empty else 0.0
     net_rev = max(gross_rev - rto_amt - ret_amt, 0.0)
-    realized_deliv_rev = float(deliv_df["Line Amount"].sum()) if not deliv_df.empty else 0.0
-    tot_disc = 0.0
-    tot_ship = 0.0
-    aov = gross_rev / max(int(non_canc_df["Order_Key"].nunique()), 1) if not non_canc_df.empty else 0.0
 
-    rto_pending_df = rto_df[~rto_df["Status_Lower"].str.contains("delivered", na=False)].copy() if not rto_df.empty else pd.DataFrame()
-    rto_hub_parcels = len(rto_pending_df)
-    rto_hub_orders = int(rto_pending_df["Order_Key"].nunique()) if not rto_pending_df.empty else 0
-
-    # Row 1: Shopify-aligned Financial KPIs
-    k1, k2, k3, k4, k5 = st.columns(5)
-    with k1:
-        _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">Unique Orders</div>
-                <div class="kpi-val">{tot_ord:,}</div>
-                <span class="kpi-tag" style="background:#EEF2FF; color:#4F46E5;">{tot_qty:,} Items ({tot_rows} Rows)</span>
-            </div>
-            <div class="kpi-ico" style="background:#EEF2FF;">🛍️</div>
-        </div>
-        """)
-    with k2:
-        _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">Gross Revenue</div>
-                <div class="kpi-val">₹{gross_rev:,.2f}</div>
-                <span class="kpi-tag" style="background:#F5F3FF; color:#7C3AED;">AOV: ₹{aov:,.0f}</span>
-            </div>
-            <div class="kpi-ico" style="background:#F5F3FF;">💰</div>
-        </div>
-        """)
-    with k3:
-        _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">Net Revenue</div>
-                <div class="kpi-val">₹{net_rev:,.2f}</div>
-                <span class="kpi-tag" style="background:#ECFDF5; color:#059669;">Delivered: ₹{realized_deliv_rev:,.0f}</span>
-            </div>
-            <div class="kpi-ico" style="background:#ECFDF5;">📈</div>
-        </div>
-        """)
-    with k4:
-        _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">Total Discount</div>
-                <div class="kpi-val">₹{tot_disc:,.2f}</div>
-                <span class="kpi-tag" style="background:#FDF2F8; color:#BE185D;">0.0% Disc. Share</span>
-            </div>
-            <div class="kpi-ico" style="background:#FDF2F8;">🏷️</div>
-        </div>
-        """)
-    with k5:
-        _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">Total Shipping Cost</div>
-                <div class="kpi-val">₹{tot_ship:,.2f}</div>
-                <span class="kpi-tag" style="background:#ECFEFF; color:#0891B2;">Avg: ₹0.0/Order</span>
-            </div>
-            <div class="kpi-ico" style="background:#ECFEFF;">🚢</div>
-        </div>
-        """)
-
-    st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
-
-    # Row 2: Shopify-aligned Operational & Return KPIs
-    f1, f2, f3, f4, f5 = st.columns(5)
-    with f1:
-        _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">Unique Dispatched</div>
-                <div class="kpi-val">{disp_cnt:,}</div>
-                <span class="kpi-tag" style="background:#ECFEFF; color:#0891B2;">Shipped: {shipped_cnt:,}</span>
-            </div>
-            <div class="kpi-ico" style="background:#ECFEFF;">📦</div>
-        </div>
-        """)
-    with f2:
-        _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">Unique Delivered</div>
-                <div class="kpi-val">{deliv_cnt:,}</div>
-                <span class="kpi-tag" style="background:#ECFDF5; color:#059669;">▲ {deliv_pct:.1f}% Success</span>
-            </div>
-            <div class="kpi-ico" style="background:#ECFDF5;">🚚</div>
-        </div>
-        """)
-    with f3:
-        _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">Total Returns Display</div>
-                <div class="kpi-val">{tot_ret_cnt:,} ({tot_ret_pct:.2f}%)</div>
-                <span class="kpi-tag" style="background:#FEF2F2; color:#DC2626;">RTO {rto_cnt:,} + Ret {ret_cnt:,}</span>
-            </div>
-            <div class="kpi-ico" style="background:#FEF2F2;">↩️</div>
-        </div>
-        """)
-    with f4:
-        _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">Pure RTO / Exch Canc</div>
-                <div class="kpi-val">{rto_cnt:,} / {canc_cnt:,}</div>
-                <span class="kpi-tag" style="background:#FFF1F2; color:#BE123C;">Active Exch: {exch_cnt:,}</span>
-            </div>
-            <div class="kpi-ico" style="background:#FFF1F2;">🔄</div>
-        </div>
-        """)
-    with f5:
-        _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">RTO Pending Hub</div>
-                <div class="kpi-val">{rto_hub_parcels:,}</div>
-                <span class="kpi-tag" style="background:#FFF7ED; color:#C2410C;">{rto_hub_orders:,} Unique Orders</span>
-            </div>
-            <div class="kpi-ico" style="background:#FFF7ED;">🏭</div>
-        </div>
-        """)
+    _render_seven_kpis_block(
+        tot_ord=tot_ord,
+        prev_m_ord=prev_m_ord_n,
+        gross_rev=gross_rev,
+        deliv_cnt=deliv_cnt,
+        net_rev=net_rev,
+        tot_ret_cnt=tot_ret_cnt,
+        cust_ret_cnt=cust_ret_cnt,
+        rto_cnt=rto_cnt,
+        exch_cnt=exch_cnt,
+    )
 
     st.markdown("<div style='height:18px;'></div>", unsafe_allow_html=True)
 
@@ -4862,13 +4767,13 @@ def render_nykaa_page():
     with tab2:
         _html(f"""
         <div class="sec-header-rto">
-            <div class="sec-title">🚚 Section 1: Nykaa RTO & Customer Return Analysis (By Order Date • RTO: {rto_cnt:,} | Cust Return: {ret_cnt:,} | Cancelled: {canc_cnt:,})</div>
+            <div class="sec-title">🚚 Section 1: Nykaa RTO & Customer Return Analysis (By Order Date • RTO: {rto_cnt:,} | Cust Return: {cust_ret_cnt:,} | Cancelled: {canc_cnt:,})</div>
             <div class="sec-sub">Order Status Breakdown & Day-Wise RTO + Return Orders by Order Creation Date</div>
         </div>
         """)
         r1, r2, r3 = st.columns(3)
         r1.metric("RTO Delivered Orders", f"{rto_cnt:,}", f"₹{rto_amt:,.2f}")
-        r2.metric("Customer Returned Orders", f"{ret_cnt:,}", f"₹{ret_amt:,.2f}")
+        r2.metric("Customer Returned Orders", f"{cust_ret_cnt:,}", f"₹{ret_amt:,.2f}")
         r3.metric("Cancelled Orders", f"{canc_cnt:,}", f"₹{canc_amt:,.2f}")
 
         n_s1_l, n_s1_r = st.columns([1.05, 1.45])
