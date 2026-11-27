@@ -739,7 +739,7 @@ def _make_donut_fig(labels, values, colors, center_text):
               line=dict(color="#FFFFFF", width=2.5),
           ),
           hovertemplate=(
-              "<b>%{label}</b><br>Orders: %{value:,}<br>Share:"
+              "<b>%{label}</b><br>Unique Orders: %{value:,}<br>Share:"
               " %{percent}<extra></extra>"
           ),
       )
@@ -843,7 +843,7 @@ def _render_rto_return_control_section(
                   lambda x: str(x)[:36] + "..." if len(str(x)) > 36 else str(x)
               ),
               x=top10_sku[rto_col_name],
-              name="RTO Orders",
+              name="RTO Unique Orders",
               orientation="h",
               marker=dict(color="#EF4444", cornerradius=5),
               text=top10_sku[rto_col_name],
@@ -856,7 +856,7 @@ def _render_rto_return_control_section(
                   lambda x: str(x)[:36] + "..." if len(str(x)) > 36 else str(x)
               ),
               x=top10_sku[ret_col_name],
-              name="Return / Exchange Orders",
+              name="Return / Exchange Unique Orders",
               orientation="h",
               marker=dict(color="#8B5CF6", cornerradius=5),
               text=top10_sku[ret_col_name],
@@ -4984,10 +4984,10 @@ def render_shopify_forecast_page():
 
 
 # ==============================================================================
-# 8. PAGE 3: MYNTRA ANALYSIS (UPDATED KPIs + PREVIOUS PERIOD COMPARISON)
+# 8. PAGE 3: MYNTRA ANALYSIS (UNIQUE ORDER COUNTS + DELIVERED EXCHANGE + DELIV)
 # ==============================================================================
 def render_myntra_page():
-  """Render Myntra analytics with accurate order_date bounds and filter synchronization."""
+  """Render Myntra analytics with unique order counts for RTO, Customer Return, Exchange, Delivered Exchange & Delivered."""
   df_all, _ = load_myntra_data(myntra_src)
   if df_all.empty:
     st.warning(
@@ -5025,7 +5025,7 @@ def render_myntra_page():
             {LOGO_BANNER_HTML}
             <div>
                 <div class="exec-title">ARTH LIFE Kids Fashion — Myntra Analysis</div>
-                <div class="exec-sub">Connected to Myntra_Consolidated_Orders.xlsx • Order Dates: {min_d.strftime('%d %b %Y')} to {max_d.strftime('%d %b %Y')}</div>
+                <div class="exec-sub">Connected to Myntra_Consolidated_Orders.xlsx • Unique Order Counts & Order Dates: {min_d.strftime('%d %b %Y')} to {max_d.strftime('%d %b %Y')}</div>
             </div>
         </div>
         <div class="exec-pill">📅 Order Date: {disp_m_start.strftime('%d %b %Y')} — {disp_m_end.strftime('%d %b %Y')}</div>
@@ -5135,6 +5135,7 @@ def render_myntra_page():
     return
 
   def _myntra_metrics(sub_df: pd.DataFrame):
+    """Compute unique order counts for RTO, Customer Return, Exchange, Delivered Exchange & Delivered."""
     if sub_df.empty:
       return {
           "tot_ord": 0,
@@ -5143,6 +5144,7 @@ def render_myntra_page():
           "rto_cnt": 0,
           "cust_ret_cnt": 0,
           "exch_cnt": 0,
+          "deliv_exch_cnt": 0,
           "deliv_cnt": 0,
           "gross_rev": 0.0,
           "rto_rev": 0.0,
@@ -5151,10 +5153,12 @@ def render_myntra_page():
           "rto_df": sub_df.copy(),
           "cust_ret_df": sub_df.copy(),
           "exch_df": sub_df.copy(),
+          "deliv_exch_df": sub_df.copy(),
           "deliv_df": sub_df.copy(),
           "is_rto_mask": pd.Series([], dtype=bool),
           "is_cust_ret_mask": pd.Series([], dtype=bool),
           "is_exch_mask": pd.Series([], dtype=bool),
+          "is_deliv_exch_mask": pd.Series([], dtype=bool),
       }
 
     t_ord = int(sub_df["Unique_Order_Key"].nunique())
@@ -5191,6 +5195,7 @@ def render_myntra_page():
         else pd.Series([False] * len(sub_df), index=sub_df.index)
     )
 
+    # Mutually exclusive classification: Exchange -> RTO -> Customer Return
     ex_mask = rt_s.str.contains("exchange", na=False) | in_e
     rto_m = (~ex_mask) & (
         rt_s.str.contains("rto", na=False)
@@ -5198,23 +5203,26 @@ def render_myntra_page():
         | (in_r & (~rt_s.str.contains("return", na=False)))
     )
     cret_m = (
-        (~rto_m)
-        & (~ex_mask)
+        (~ex_mask)
+        & (~rto_m)
         & (
             rt_s.str.contains("return", na=False)
             | st_s.str.contains("reverse", na=False)
             | in_r
         )
     )
+    deliv_ex_m = ex_mask & (st_s == "delivered")
 
     r_df = sub_df[rto_m].copy()
     c_df = sub_df[cret_m].copy()
     e_df = sub_df[ex_mask].copy()
+    de_df = sub_df[deliv_ex_m].copy()
     dv_df = sub_df[st_s == "delivered"].copy()
 
     r_cnt = int(r_df["Unique_Order_Key"].nunique()) if not r_df.empty else 0
     c_cnt = int(c_df["Unique_Order_Key"].nunique()) if not c_df.empty else 0
     e_cnt = int(e_df["Unique_Order_Key"].nunique()) if not e_df.empty else 0
+    de_cnt = int(de_df["Unique_Order_Key"].nunique()) if not de_df.empty else 0
     dv_cnt = int(dv_df["Unique_Order_Key"].nunique()) if not dv_df.empty else 0
 
     g_rev = float(sub_df["seller_paid_amount"].sum())
@@ -5229,6 +5237,7 @@ def render_myntra_page():
         "rto_cnt": r_cnt,
         "cust_ret_cnt": c_cnt,
         "exch_cnt": e_cnt,
+        "deliv_exch_cnt": de_cnt,
         "deliv_cnt": dv_cnt,
         "gross_rev": g_rev,
         "rto_rev": r_rev,
@@ -5237,10 +5246,12 @@ def render_myntra_page():
         "rto_df": r_df,
         "cust_ret_df": c_df,
         "exch_df": e_df,
+        "deliv_exch_df": de_df,
         "deliv_df": dv_df,
         "is_rto_mask": rto_m,
         "is_cust_ret_mask": cret_m,
         "is_exch_mask": ex_mask,
+        "is_deliv_exch_mask": deliv_ex_m,
     }
 
   cur_m = _myntra_metrics(p_df)
@@ -5252,6 +5263,7 @@ def render_myntra_page():
   rto_cnt = cur_m["rto_cnt"]
   cust_ret_cnt = cur_m["cust_ret_cnt"]
   exch_cnt = cur_m["exch_cnt"]
+  deliv_exch_cnt = cur_m["deliv_exch_cnt"]
   deliv_cnt = cur_m["deliv_cnt"]
   seller_rev = cur_m["gross_rev"]
   rto_seller_rev = cur_m["rto_rev"]
@@ -5270,6 +5282,7 @@ def render_myntra_page():
   cust_ret_pct = (
       (cust_ret_cnt / max(disp_cnt, 1) * 100) if disp_cnt > 0 else 0.0
   )
+  deliv_pct = (deliv_cnt / max(disp_cnt, 1) * 100) if disp_cnt > 0 else 0.0
 
   ord_delta_txt = _fmt_period_delta(tot_ord, prv_m["tot_ord"])
   rto_delta_txt = _fmt_period_delta(rto_cnt, prv_m["rto_cnt"])
@@ -5279,6 +5292,7 @@ def render_myntra_page():
       seller_rev, prv_m["gross_rev"], is_currency=True
   )
 
+  # Row 1: Total Orders Created (vs Prev), RTO Count (% + Prev Δ), Customer Return Count (% + Prev Δ), Exchange Count (Prev Δ + Deliv Exch), Gross Revenue (Prev Δ)
   k1, k2, k3, k4, k5 = st.columns(5)
   with k1:
     _html(f"""
@@ -5286,7 +5300,7 @@ def render_myntra_page():
             <div>
                 <div class="kpi-lbl">Total Orders Created</div>
                 <div class="kpi-val">{tot_ord:,}</div>
-                <span class="kpi-tag" style="background:#EEF2FF; color:#4F46E5;">{ord_delta_txt}</span>
+                <span class="kpi-tag" style="background:#EEF2FF; color:#4F46E5;">{ord_delta_txt} · {tot_rows:,} Items</span>
             </div>
             <div class="kpi-ico" style="background:#EEF2FF;">🛍️</div>
         </div>
@@ -5295,7 +5309,7 @@ def render_myntra_page():
     _html(f"""
         <div class="kpi-card">
             <div>
-                <div class="kpi-lbl">RTO Count</div>
+                <div class="kpi-lbl">RTO Count (Unique)</div>
                 <div class="kpi-val">{rto_cnt:,} ({rto_pct:.1f}%)</div>
                 <span class="kpi-tag" style="background:#FEF2F2; color:#DC2626;">{rto_delta_txt}</span>
             </div>
@@ -5306,7 +5320,7 @@ def render_myntra_page():
     _html(f"""
         <div class="kpi-card">
             <div>
-                <div class="kpi-lbl">Customer Return Count</div>
+                <div class="kpi-lbl">Customer Return (Unique)</div>
                 <div class="kpi-val">{cust_ret_cnt:,} ({cust_ret_pct:.1f}%)</div>
                 <span class="kpi-tag" style="background:#FFF1F2; color:#BE123C;">{cret_delta_txt}</span>
             </div>
@@ -5317,9 +5331,9 @@ def render_myntra_page():
     _html(f"""
         <div class="kpi-card">
             <div>
-                <div class="kpi-lbl">Exchange Count</div>
+                <div class="kpi-lbl">Exchange Count (Unique)</div>
                 <div class="kpi-val">{exch_cnt:,}</div>
-                <span class="kpi-tag" style="background:#F3E8FF; color:#7C3AED;">{exch_delta_txt}</span>
+                <span class="kpi-tag" style="background:#F3E8FF; color:#7C3AED;">{exch_delta_txt} · Deliv Exch: {deliv_exch_cnt:,}</span>
             </div>
             <div class="kpi-ico" style="background:#F3E8FF;">🔄</div>
         </div>
@@ -5338,6 +5352,7 @@ def render_myntra_page():
 
   st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
 
+  # Row 2: Order Dispatched, Successfully Delivered (Unique), Return & RTO Deductions, Net Revenue
   s_k1, s_k2, s_k3, s_k4 = st.columns(4)
   with s_k1:
     _html(f"""
@@ -5354,9 +5369,9 @@ def render_myntra_page():
     _html(f"""
         <div class="kpi-card">
             <div>
-                <div class="kpi-lbl">Delivered Orders</div>
-                <div class="kpi-val">{deliv_cnt:,}</div>
-                <span class="kpi-tag" style="background:#ECFDF5; color:#059669;">{deliv_cnt/max(disp_cnt,1)*100:.1f}% of Dispatched</span>
+                <div class="kpi-lbl">Successfully Delivered</div>
+                <div class="kpi-val">{deliv_cnt:,} ({deliv_pct:.1f}%)</div>
+                <span class="kpi-tag" style="background:#ECFDF5; color:#059669;">{_fmt_period_delta(deliv_cnt, prv_m['deliv_cnt'])}</span>
             </div>
             <div class="kpi-ico" style="background:#ECFDF5;">🚚</div>
         </div>
@@ -5378,7 +5393,7 @@ def render_myntra_page():
             <div>
                 <div class="kpi-lbl">Net Revenue</div>
                 <div class="kpi-val">₹{net_seller_rev:,.2f}</div>
-                <span class="kpi-tag" style="background:#EEF2FF; color:#4338CA;">AOV: ₹{aov:,.0f}</span>
+                <span class="kpi-tag" style="background:#EEF2FF; color:#4338CA;">AOV: ₹{aov:,.0f} · Deliv Exch: {deliv_exch_cnt:,}</span>
             </div>
             <div class="kpi-ico" style="background:#EEF2FF;">📈</div>
         </div>
@@ -5545,6 +5560,7 @@ def render_myntra_page():
           "Customer Returns",
           "RTO Count",
           "Exchanges",
+          "Delivered Exchanges",
       ]
       funnel_vals = [
           tot_ord,
@@ -5553,6 +5569,7 @@ def render_myntra_page():
           cust_ret_cnt,
           rto_cnt,
           exch_cnt,
+          deliv_exch_cnt,
       ]
       funnel_colors = [
           "#4F46E5",
@@ -5561,6 +5578,7 @@ def render_myntra_page():
           "#E11D48",
           "#EF4444",
           "#8B5CF6",
+          "#A855F7",
       ]
       fig_fun = go.Figure(
           go.Bar(
@@ -5588,15 +5606,15 @@ def render_myntra_page():
   with tab2:
     _html(f"""
         <div class="sec-header-rto">
-            <div class="sec-title">🚚 Section 1: Myntra RTO & Customer Return Analysis (RTO: {rto_cnt:,} | Cust Return: {cust_ret_cnt:,})</div>
-            <div class="sec-sub">Reverse Status Donut & Day-Wise RTO + Customer Return Orders Trend</div>
+            <div class="sec-title">🚚 Section 1: Myntra RTO & Customer Return Analysis (Unique — RTO: {rto_cnt:,} | Cust Return: {cust_ret_cnt:,} | Deliv Exch: {deliv_exch_cnt:,})</div>
+            <div class="sec-sub">Reverse Status Donut & Day-Wise RTO + Customer Return Unique Orders Trend</div>
         </div>
         """)
     s1_mc1, s1_mc2 = st.columns([1.05, 1.45])
     with s1_mc1:
       _html(
           '<div class="card-box"><div class="card-title">🍩 RTO Reverse'
-          " Status (Donut)</div>"
+          " Status (Unique Orders)</div>"
       )
       if not rto_df.empty:
         r_st = (
@@ -5616,7 +5634,7 @@ def render_myntra_page():
         )
         _html(
             f'<div class="viz-info"><b>RTO Impact:</b> <b>{rto_cnt:,}</b>'
-            f" RTO orders ({rto_pct:.1f}% of dispatched) · Seller Value:"
+            f" unique RTO orders ({rto_pct:.1f}% of dispatched) · Seller Value:"
             f" <b>₹{rto_seller_rev:,.0f}</b>.</div>"
         )
       else:
@@ -5626,7 +5644,7 @@ def render_myntra_page():
     with s1_mc2:
       _html(
           '<div class="card-box"><div class="card-title">📅 Day-Wise RTO &'
-          " Customer Return Orders Analysis</div>"
+          " Customer Return Unique Orders Analysis</div>"
       )
       ret_rto_comb_df = p_df[is_rto_mask | is_cust_ret_mask].copy()
       if (
@@ -5686,7 +5704,7 @@ def render_myntra_page():
         st.plotly_chart(fig_dmr, use_container_width=True, key="my_day_rr")
         _html(
             '<div class="viz-info"><b>Customer Returns:</b>'
-            f" <b>{cust_ret_cnt:,}</b> orders ({cust_ret_pct:.1f}%) ·"
+            f" <b>{cust_ret_cnt:,}</b> unique orders ({cust_ret_pct:.1f}%) ·"
             f" Seller Value: <b>₹{cust_ret_seller_rev:,.0f}</b>.</div>"
         )
       else:
@@ -5697,25 +5715,30 @@ def render_myntra_page():
 
     _html(f"""
         <div class="sec-header-exch">
-            <div class="sec-title">🔄 Section 2: Myntra Exchange & Net Seller Paid Summary (Exchanges: {exch_cnt:,})</div>
-            <div class="sec-sub">Exchange Orders, Gross vs Deductions & Net Seller Paid Revenue</div>
+            <div class="sec-title">🔄 Section 2: Myntra Exchange & Net Seller Paid Summary (Unique Exchanges: {exch_cnt:,} | Delivered Exchanges: {deliv_exch_cnt:,})</div>
+            <div class="sec-sub">Unique Exchange Orders, Delivered Exchanges, Gross vs Deductions & Net Seller Paid Revenue</div>
         </div>
         """)
     s2_mc1, s2_mc2 = st.columns([1.05, 1.45])
     with s2_mc1:
       _html(
           '<div class="card-box"><div class="card-title">🍩 Return & Exchange'
-          " Mix (Donut)</div>"
+          " Mix (Unique Orders)</div>"
       )
-      mix_lbls = ["RTO Orders", "Customer Returns", "Exchanges"]
-      mix_vals = [rto_cnt, cust_ret_cnt, exch_cnt]
+      mix_lbls = [
+          "RTO Orders",
+          "Customer Returns",
+          "Exchanges",
+          "Delivered Exchanges",
+      ]
+      mix_vals = [rto_cnt, cust_ret_cnt, exch_cnt, deliv_exch_cnt]
       if sum(mix_vals) > 0:
         st.plotly_chart(
             _make_donut_fig(
                 mix_lbls,
                 mix_vals,
-                ["#EF4444", "#EC4899", "#8B5CF6"],
-                f"<b>{sum(mix_vals):,}</b><br>Rev/Exch",
+                ["#EF4444", "#EC4899", "#8B5CF6", "#10B981"],
+                f"<b>{rto_cnt + cust_ret_cnt + exch_cnt:,}</b><br>Unique",
             ),
             use_container_width=True,
             key="my_mix_dn",
@@ -5736,8 +5759,9 @@ def render_myntra_page():
       )
       st.metric("Net Seller Paid Revenue", f"₹{net_seller_rev:,.2f}")
       st.caption(
-          f"Active Exchange Orders: {exch_cnt:,} | Avg Order Value (AOV):"
-          f" ₹{aov:,.0f}"
+          f"Unique Exchange Orders: {exch_cnt:,} (Delivered Exchanges:"
+          f" {deliv_exch_cnt:,}) · Successfully Delivered: {deliv_cnt:,} |"
+          f" AOV: ₹{aov:,.0f}"
       )
       _html("</div>")
 
@@ -5904,7 +5928,7 @@ def render_myntra_page():
 
 
 # ==============================================================================
-# 9. PAGE 4: NYKAA ANALYSIS (UPDATED KPIs + PREVIOUS PERIOD COMPARISON)
+# 9. PAGE 4: NYKAA ANALYSIS (UNIQUE ORDER COUNTS + DELIVERED EXCHANGE + DELIV)
 # ==============================================================================
 def render_nykaa_page():
   if nykaa_src is None:
@@ -5939,7 +5963,7 @@ def render_nykaa_page():
             {LOGO_BANNER_HTML}
             <div>
                 <div class="exec-title">ARTH LIFE Kids Fashion — Nykaa Analysis</div>
-                <div class="exec-sub">Connected to OrderExport (16).xls • Web Orders, RTO/Return Analysis, SKU Control & Net Revenue</div>
+                <div class="exec-sub">Connected to OrderExport (16).xls • Unique Order Counts, RTO/Return, Exchange, Delivered & Net Revenue</div>
             </div>
         </div>
         <div class="exec-pill">📅 Orders: {disp_n_start.strftime('%d %b %Y')} — {disp_n_end.strftime('%d %b %Y')}</div>
@@ -6048,6 +6072,7 @@ def render_nykaa_page():
     return
 
   def _nykaa_metrics(sub_df: pd.DataFrame):
+    """Compute unique order counts for RTO, Customer Return, Exchange, Delivered Exchange & Delivered."""
     if sub_df.empty:
       return {
           "tot_ord": 0,
@@ -6060,11 +6085,13 @@ def render_nykaa_page():
           "rto_df": sub_df.copy(),
           "ret_df": sub_df.copy(),
           "exch_df": sub_df.copy(),
+          "deliv_exch_df": sub_df.copy(),
           "deliv_cnt": 0,
           "shipped_cnt": 0,
           "rto_cnt": 0,
           "ret_cnt": 0,
           "exch_cnt": 0,
+          "deliv_exch_cnt": 0,
           "canc_cnt": 0,
           "gross_rev": 0.0,
           "rto_amt": 0.0,
@@ -6077,26 +6104,28 @@ def render_nykaa_page():
     t_rows = len(sub_df)
     t_qty = int(sub_df["Qty"].sum())
 
-    nc_df = sub_df[sub_df["Status_Lower"] != "cancelled"].copy()
-    c_df = sub_df[sub_df["Status_Lower"] == "cancelled"].copy()
-    dv_df = sub_df[sub_df["Status_Lower"] == "delivered"].copy()
-    sh_df = sub_df[sub_df["Status_Lower"] == "shipped"].copy()
-    ex_df = sub_df[sub_df["Status_Lower"].str.contains("exchange", na=False)].copy()
-    r_df = sub_df[
-        (~sub_df["Status_Lower"].str.contains("exchange", na=False))
-        & sub_df["Status_Lower"].str.contains("rto", na=False)
-    ].copy()
-    rt_df = sub_df[
-        (~sub_df["Status_Lower"].str.contains("exchange", na=False))
-        & (~sub_df["Status_Lower"].str.contains("rto", na=False))
-        & sub_df["Status_Lower"].str.contains("return", na=False)
-    ].copy()
+    st_l = sub_df["Status_Lower"]
+    nc_df = sub_df[st_l != "cancelled"].copy()
+    c_df = sub_df[st_l == "cancelled"].copy()
+    dv_df = sub_df[st_l == "delivered"].copy()
+    sh_df = sub_df[st_l == "shipped"].copy()
+
+    ex_m = st_l.str.contains("exchange", na=False)
+    rto_m = (~ex_m) & st_l.str.contains("rto", na=False)
+    ret_m = (~ex_m) & (~rto_m) & st_l.str.contains("return", na=False)
+    deliv_ex_m = ex_m & (st_l == "delivered")
+
+    r_df = sub_df[rto_m].copy()
+    rt_df = sub_df[ret_m].copy()
+    e_df = sub_df[ex_m].copy()
+    de_df = sub_df[deliv_ex_m].copy()
 
     dv_cnt = int(dv_df["Order_Key"].nunique()) if not dv_df.empty else 0
     sh_cnt = int(sh_df["Order_Key"].nunique()) if not sh_df.empty else 0
     r_cnt = int(r_df["Order_Key"].nunique()) if not r_df.empty else 0
     rt_cnt = int(rt_df["Order_Key"].nunique()) if not rt_df.empty else 0
-    ex_cnt = int(ex_df["Order_Key"].nunique()) if not ex_df.empty else 0
+    e_cnt = int(e_df["Order_Key"].nunique()) if not e_df.empty else 0
+    de_cnt = int(de_df["Order_Key"].nunique()) if not de_df.empty else 0
     c_cnt = int(c_df["Order_Key"].nunique()) if not c_df.empty else 0
 
     g_rev = float(nc_df["Line Amount"].sum()) if not nc_df.empty else 0.0
@@ -6115,12 +6144,14 @@ def render_nykaa_page():
         "shipped_df": sh_df,
         "rto_df": r_df,
         "ret_df": rt_df,
-        "exch_df": ex_df,
+        "exch_df": e_df,
+        "deliv_exch_df": de_df,
         "deliv_cnt": dv_cnt,
         "shipped_cnt": sh_cnt,
         "rto_cnt": r_cnt,
         "ret_cnt": rt_cnt,
-        "exch_cnt": ex_cnt,
+        "exch_cnt": e_cnt,
+        "deliv_exch_cnt": de_cnt,
         "canc_cnt": c_cnt,
         "gross_rev": g_rev,
         "rto_amt": r_a,
@@ -6142,6 +6173,7 @@ def render_nykaa_page():
   rto_cnt = cur_n["rto_cnt"]
   ret_cnt = cur_n["ret_cnt"]
   exch_cnt = cur_n["exch_cnt"]
+  deliv_exch_cnt = cur_n["deliv_exch_cnt"]
   canc_cnt = cur_n["canc_cnt"]
   gross_rev = cur_n["gross_rev"]
   rto_amt = cur_n["rto_amt"]
@@ -6154,6 +6186,7 @@ def render_nykaa_page():
   rto_ret_pct = (rto_ret_comb_cnt / max(tot_ord, 1) * 100) if tot_ord > 0 else 0.0
   rto_only_pct = (rto_cnt / max(tot_ord, 1) * 100) if tot_ord > 0 else 0.0
   ret_only_pct = (ret_cnt / max(tot_ord, 1) * 100) if tot_ord > 0 else 0.0
+  deliv_pct = (deliv_cnt / max(tot_ord, 1) * 100) if tot_ord > 0 else 0.0
 
   aov = (
       gross_rev / max(int(non_canc_df["Order_Key"].nunique()), 1)
@@ -6195,9 +6228,9 @@ def render_nykaa_page():
     _html(f"""
         <div class="kpi-card">
             <div>
-                <div class="kpi-lbl">Exchange Count</div>
+                <div class="kpi-lbl">Exchange Count (Unique)</div>
                 <div class="kpi-val">{exch_cnt:,}</div>
-                <span class="kpi-tag" style="background:#F3E8FF; color:#7C3AED;">{exch_delta_txt}</span>
+                <span class="kpi-tag" style="background:#F3E8FF; color:#7C3AED;">{exch_delta_txt} · Deliv Exch: {deliv_exch_cnt:,}</span>
             </div>
             <div class="kpi-ico" style="background:#F3E8FF;">🔄</div>
         </div>
@@ -6232,6 +6265,17 @@ def render_nykaa_page():
     _html(f"""
         <div class="kpi-card">
             <div>
+                <div class="kpi-lbl">Successfully Delivered</div>
+                <div class="kpi-val">{deliv_cnt:,} ({deliv_pct:.1f}%)</div>
+                <span class="kpi-tag" style="background:#ECFDF5; color:#059669;">{_fmt_period_delta(deliv_cnt, prv_n['deliv_cnt'])} · Ship: {shipped_cnt:,}</span>
+            </div>
+            <div class="kpi-ico" style="background:#ECFDF5;">🚚</div>
+        </div>
+        """)
+  with s_k2:
+    _html(f"""
+        <div class="kpi-card">
+            <div>
                 <div class="kpi-lbl">Total Qty & Rows</div>
                 <div class="kpi-val">{tot_qty:,} Qty</div>
                 <span class="kpi-tag" style="background:#EEF2FF; color:#4F46E5;">{tot_rows:,} Order Rows</span>
@@ -6239,22 +6283,11 @@ def render_nykaa_page():
             <div class="kpi-ico" style="background:#EEF2FF;">📦</div>
         </div>
         """)
-  with s_k2:
-    _html(f"""
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-lbl">Delivered Orders</div>
-                <div class="kpi-val">{deliv_cnt:,}</div>
-                <span class="kpi-tag" style="background:#ECFDF5; color:#059669;">Shipped: {shipped_cnt:,}</span>
-            </div>
-            <div class="kpi-ico" style="background:#ECFDF5;">🚚</div>
-        </div>
-        """)
   with s_k3:
     _html(f"""
         <div class="kpi-card">
             <div>
-                <div class="kpi-lbl">RTO Split</div>
+                <div class="kpi-lbl">RTO Split (Unique)</div>
                 <div class="kpi-val">{rto_cnt:,} ({rto_only_pct:.1f}%)</div>
                 <span class="kpi-tag" style="background:#FEF2F2; color:#DC2626;">₹{rto_amt:,.0f}</span>
             </div>
@@ -6265,7 +6298,7 @@ def render_nykaa_page():
     _html(f"""
         <div class="kpi-card">
             <div>
-                <div class="kpi-lbl">Customer Return Split</div>
+                <div class="kpi-lbl">Customer Return Split (Unique)</div>
                 <div class="kpi-val">{ret_cnt:,} ({ret_only_pct:.1f}%)</div>
                 <span class="kpi-tag" style="background:#FFF1F2; color:#BE123C;">₹{ret_amt:,.0f}</span>
             </div>
@@ -6410,20 +6443,20 @@ def render_nykaa_page():
   with tab2:
     _html(f"""
         <div class="sec-header-rto">
-            <div class="sec-title">🚚 Section 1: Nykaa RTO & Customer Return Analysis (RTO: {rto_cnt:,} | Cust Return: {ret_cnt:,} | Exchange: {exch_cnt:,} | Cancelled: {canc_cnt:,})</div>
-            <div class="sec-sub">Order Status Breakdown & Day-Wise RTO + Return Orders Trend</div>
+            <div class="sec-title">🚚 Section 1: Nykaa RTO & Customer Return Analysis (Unique — RTO: {rto_cnt:,} | Cust Return: {ret_cnt:,} | Exchange: {exch_cnt:,} | Deliv Exch: {deliv_exch_cnt:,} | Cancelled: {canc_cnt:,})</div>
+            <div class="sec-sub">Order Status Breakdown & Day-Wise RTO + Return Unique Orders Trend</div>
         </div>
         """)
     r1, r2, r3 = st.columns(3)
-    r1.metric("RTO Delivered Orders", f"{rto_cnt:,}", f"₹{rto_amt:,.2f}")
-    r2.metric("Customer Returned Orders", f"{ret_cnt:,}", f"₹{ret_amt:,.2f}")
-    r3.metric("Cancelled Orders", f"{canc_cnt:,}", f"₹{canc_amt:,.2f}")
+    r1.metric("RTO Unique Orders", f"{rto_cnt:,}", f"₹{rto_amt:,.2f}")
+    r2.metric("Customer Returned Unique Orders", f"{ret_cnt:,}", f"₹{ret_amt:,.2f}")
+    r3.metric("Cancelled Unique Orders", f"{canc_cnt:,}", f"₹{canc_amt:,.2f}")
 
     n_s1_l, n_s1_r = st.columns([1.05, 1.45])
     with n_s1_l:
       _html(
           '<div class="card-box"><div class="card-title">🍩 Status Mix'
-          " (Donut)</div>"
+          " (Unique Orders)</div>"
       )
       st.plotly_chart(
           _make_donut_fig(
@@ -6440,7 +6473,7 @@ def render_nykaa_page():
     with n_s1_r:
       _html(
           '<div class="card-box"><div class="card-title">📅 Day-Wise RTO &'
-          " Customer Return Trend</div>"
+          " Customer Return Unique Orders Trend</div>"
       )
       ny_rr_df = p_df[
           p_df["Status_Lower"].str.contains("rto|return", na=False)
@@ -6504,7 +6537,7 @@ def render_nykaa_page():
     _html("""
         <div class="sec-header-exch">
             <div class="sec-title">🔄 Section 2: Nykaa Status Summary & Net Revenue Impact</div>
-            <div class="sec-sub">Status-wise Orders, Quantity & Line Amount Impact</div>
+            <div class="sec-sub">Status-wise Unique Orders, Quantity & Line Amount Impact</div>
         </div>
         """)
     _html(
