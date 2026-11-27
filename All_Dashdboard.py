@@ -1578,9 +1578,14 @@ def render_daily_page():
 
     if not df_rev.empty and "Base_Order_ID" in df_rev.columns:
         f_rev = df_rev[df_rev["Base_Order_ID"].isin(set(f_orders["Base_Order_ID"]))].copy()
-        f_rev["_rev_d"] = f_rev["Pickup_Date_dt"].dt.date if "Pickup_Date_dt" in f_rev.columns else pd.NaT
+        if "Pickup_Date_dt" in f_rev.columns and f_rev["Pickup_Date_dt"].notna().any():
+            f_rev["_rev_d"] = f_rev["Pickup_Date_dt"].dt.date
+        else:
+            ord_date_map = f_orders.dropna(subset=["_ord_d"]).drop_duplicates("Base_Order_ID").set_index("Base_Order_ID")["_ord_d"]
+            f_rev["_rev_d"] = f_rev["Base_Order_ID"].map(ord_date_map)
     else:
         f_rev = pd.DataFrame(columns=["Base_Order_ID", "_rev_d"])
+    f_rev_id_col = _find_col(f_rev, ["Order_ID", "Base_Order_ID"]) if not f_rev.empty else None
 
     latest_ym_val = f_orders[f_orders["_ord_d"] <= selected_date]["_ym"].dropna().max()
     if pd.isna(latest_ym_val) or not latest_ym_val:
@@ -1706,8 +1711,8 @@ def render_daily_page():
 
         rto_k = int(f_disp[(f_disp["_disp_d"] == d_k) & rto_mask]["Base_Order_ID"].nunique())
         ex_k = (
-            int(f_rev[f_rev["_rev_d"] == d_k]["Base_Order_ID"].nunique())
-            if (not f_rev.empty and "_rev_d" in f_rev.columns)
+            int(f_rev[f_rev["_rev_d"] == d_k][f_rev_id_col].nunique())
+            if (not f_rev.empty and "_rev_d" in f_rev.columns and f_rev_id_col)
             else 0
         )
 
@@ -2065,7 +2070,6 @@ def render_daily_page():
     s2b_l, s2b_r = st.columns(2)
     status_palette = ["#EF4444", "#F97316", "#F59E0B", "#8B5CF6", "#0EA5E9", "#10B981", "#EC4899", "#64748B"]
 
-    # Daily RTO Status (Chart + Full Row-Level Table + Multi-Sheet Excel)
     with s2b_l:
         _html('<div class="viz-card"><div class="viz-heading">🚚 Daily RTO Status Breakdown (7 Days)</div>')
         rto_7d_df = f_disp[f_disp["_disp_d"].isin(dates_7d) & rto_mask].copy()
@@ -2144,7 +2148,6 @@ def render_daily_page():
             st.info("No RTO orders in the selected 7-day window.")
         _html("</div>")
 
-    # Daily Exchange Status (Chart + Full Row-Level Table + Multi-Sheet Excel)
     with s2b_r:
         _html('<div class="viz-card"><div class="viz-heading">🔄 Daily Exchange Status Breakdown (7 Days)</div>')
         ex_7d_df = f_rev[f_rev["_rev_d"].isin(dates_7d)].copy() if (not f_rev.empty and "_rev_d" in f_rev.columns) else pd.DataFrame()
@@ -2971,11 +2974,11 @@ def render_shopify_page():
                 st.info("No day-wise RTO data.")
             _html("</div>")
 
-        # Section 2: Exchange Analysis
+        # Section 2: Exchange Analysis (INCLUDES ALL EXCHANGES — DOES NOT EXCLUDE CANCELLED)
         _html(f"""
         <div class="sec-header-exch">
-            <div class="sec-title">🔄 Section 2: Exchange Analysis (Active Exchanges: {exch_cnt:,} | Exchanged Cancelled: {canc_exch_cnt:,})</div>
-            <div class="sec-sub">Exchanged Status by Reverse_Status, Day-Wise Exchange Orders & Reverse Logistics Table</div>
+            <div class="sec-title">🔄 Section 2: Exchange Analysis (All Exchanges: {int(p_rev_all[rev_order_id_col if rev_order_id_col else rev_base_col].nunique()) if not p_rev_all.empty else 0:,} | Active: {exch_cnt:,} | Cancelled: {canc_exch_cnt:,})</div>
+            <div class="sec-sub">Exchanged Status by Reverse_Status, Day-Wise Exchange Orders (All Exchanges incl. Cancelled) & Reverse Logistics Table</div>
         </div>
         """)
 
@@ -3019,9 +3022,9 @@ def render_shopify_page():
             _html("</div>")
 
         with ex_c2:
-            _html('<div class="card-box"><div class="card-title">📅 Day-Wise Exchange Orders Analysis (Non-Cancelled)</div>')
-            if not p_rev_active.empty and rev_base_col:
-                rev_d = p_rev_active.merge(
+            _html('<div class="card-box"><div class="card-title">📅 Day-Wise Exchange Orders Analysis (All Exchanges)</div>')
+            if not p_rev_all.empty and rev_base_col:
+                rev_d = p_rev_all.merge(
                     p_orders_uniq[[base_oid_col, "Order_Date_dt"]], left_on=rev_base_col, right_on=base_oid_col, how="left"
                 )
                 id_for_day = (
@@ -3040,7 +3043,7 @@ def render_shopify_page():
                         go.Bar(
                             x=d_ex["Date_Lbl"],
                             y=d_ex["Exchange_Count"],
-                            name="Day-Wise Exchanges",
+                            name="Day-Wise Exchanges (All)",
                             marker=dict(color="#A855F7", cornerradius=6),
                             text=d_ex["Exchange_Count"],
                             textposition="outside",
@@ -3064,7 +3067,7 @@ def render_shopify_page():
                     fig_d_ex.update_yaxes(range=[0, max(float(d_ex["Exchange_Count"].max()) * 1.32, 3.0)])
                     st.plotly_chart(fig_d_ex, use_container_width=True, key="shp_s2_day_ex")
                     peak_ex_row = d_ex.loc[d_ex["Exchange_Count"].idxmax()]
-                    _html(f'<div class="viz-info"><b>Peak Exchange Day:</b> <b>{peak_ex_row["Date_Lbl"]}</b> ({int(peak_ex_row["Exchange_Count"]):,}) · Avg: <b>{d_ex["Exchange_Count"].mean():.1f}/day</b>.</div>')
+                    _html(f'<div class="viz-info"><b>Peak Exchange Day (All):</b> <b>{peak_ex_row["Date_Lbl"]}</b> ({int(peak_ex_row["Exchange_Count"]):,}) · Total: <b>{int(d_ex["Exchange_Count"].sum()):,}</b> · Avg: <b>{d_ex["Exchange_Count"].mean():.1f}/day</b>.</div>')
                 else:
                     st.info("No dated exchange records in selected period.")
             else:
@@ -3798,7 +3801,6 @@ def render_shopify_forecast_page():
         key="dl_shp_forecast_csv",
     )
 
-    # Customer Cohort Analysis placed at the very bottom
     _render_customer_cohort_matrix(orders_clean, max_months=8)
 
 
