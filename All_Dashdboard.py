@@ -1868,7 +1868,7 @@ def render_daily_page():
   else:
     df_disp_c["_disp_d"] = pd.NaT
 
-  # Normalize carrier column (check Dispatch_Category first, fallback to Carrier)
+  # Normalize carrier column (check Dispatch_Category and Carrier columns case-insensitively)
   car_col = _find_col(df_disp_c, ["Dispatch_Category", "Carrier"])
   if car_col:
     car_low = df_disp_c[car_col].fillna("").astype(str).str.strip().str.lower()
@@ -1904,13 +1904,15 @@ def render_daily_page():
       rev_c["_base_oid"] = rev_c[rev_base].astype(str).str.strip()
       f_rev = rev_c[rev_c["_base_oid"].isin(win_7d_oids)].copy()
       f_rev_id_col = "_base_oid"
-      # Map Order_Date from created orders so counts align with created order date
       ord_dt_map = (
           win_7d_orders.dropna(subset=["_ord_d"])
           .drop_duplicates("Base_Order_ID")
           .set_index("Base_Order_ID")["_ord_d"]
       )
       f_rev["_rev_d"] = f_rev["_base_oid"].map(ord_dt_map)
+      f_rev["Order_Created_Date"] = pd.to_datetime(f_rev["_rev_d"]).dt.strftime(
+          "%Y-%m-%d"
+      )
     else:
       f_rev = pd.DataFrame(columns=["_base_oid", "_rev_d"])
   else:
@@ -1995,7 +1997,6 @@ def render_daily_page():
   )
   unful_diff = unful_day_cnt - unful_prev_cnt
 
-  # Dispatched count for orders created on selected_date
   disp_day_cnt = len(
       set(
           valid_disp[valid_disp["Base_Order_ID"].isin(day_oids)]["Base_Order_ID"]
@@ -2063,7 +2064,6 @@ def render_daily_page():
     )
     cod_k = max(0, ord_k - pre_k)
 
-    # Dispatches belonging to Order_IDs created on d_k
     ddf_k = valid_disp[valid_disp["Base_Order_ID"].isin(oids_k)]
     dp_k = len(set(ddf_k["Base_Order_ID"].dropna().astype(str)))
     delh_k = int(
@@ -2457,6 +2457,7 @@ def render_daily_page():
             textposition="inside",
         )
     )
+    max_car_y = max(int((df_7d["Delhivery"] + df_7d["DTDC"]).max()), 1) * 1.25
     _style_fig(
         fig_car,
         height=215,
@@ -2464,6 +2465,7 @@ def render_daily_page():
         hovermode="x unified",
     )
     fig_car.update_layout(barmode="stack")
+    fig_car.update_yaxes(range=[0, max_car_y])
     st.plotly_chart(fig_car, use_container_width=True)
     _html(
         f'<div class="viz-info"><b>7D Carrier Orders:</b> Delhivery:'
@@ -2798,11 +2800,24 @@ def render_daily_page():
           fig_ex_st, use_container_width=True, key="daily_ex_status_chart"
       )
 
-      ex_full_cols = [
+      prio_ex_7d = [
+          c
+          for c in [
+              "Order_Created_Date",
+              "Base_Order_ID",
+              "Order_ID",
+              "Pickup_Date",
+              "Reverse_Status",
+              "Amount",
+          ]
+          if c in ex_7d_df.columns
+      ]
+      other_ex_7d = [
           c
           for c in ex_7d_df.columns
-          if not c.startswith("_") and not c.endswith("_dt")
+          if c not in prio_ex_7d and not c.startswith("_") and not c.endswith("_dt")
       ]
+      ex_full_cols = prio_ex_7d + other_ex_7d
       ex_sort_col = (
           "Pickup_Date_dt" if "Pickup_Date_dt" in ex_7d_df.columns else None
       )
@@ -2954,7 +2969,7 @@ def render_daily_page():
 
 
 # ==============================================================================
-# 7. PAGE 2: SHOPIFY ANALYSIS (STRICT CREATED ORDER_ID SCOPE FOR EVERY COUNT)
+# 7. PAGE 2: SHOPIFY ANALYSIS (STRICT CREATED ORDER_ID SCOPE + ORDER CREATED DATE)
 # ==============================================================================
 def render_shopify_page():
   if model_src is None:
@@ -3215,7 +3230,7 @@ def render_shopify_page():
       else set()
   )
 
-  # 3. Exchanges / Reverse strictly for Order_IDs created in this period
+  # 3. Exchanges / Reverse strictly for Order_IDs created in this period + Order_Created_Date column
   rev_base_col = (
       _find_col(df_rev, ["Base_Order_ID", "Order_ID"])
       if not df_rev.empty
@@ -3229,18 +3244,21 @@ def render_shopify_page():
       else None
   )
 
-  if not df_rev.empty and rev_base_col:
+  if not df_rev.empty and rev_base_col and base_oid_col:
     rev_work = df_rev.copy()
     rev_work["_base_oid"] = rev_work[rev_base_col].astype(str).str.strip()
     p_rev_all = rev_work[rev_work["_base_oid"].isin(period_ids)].copy()
 
-    # Attach Order_Date_dt from created orders so day-wise exchange chart plots created order date
+    # Map Order_Date_dt from created orders and expose Order_Created_Date column
     ord_dt_map_shp = (
         p_orders.dropna(subset=["Order_Date_dt"])
         .drop_duplicates(subset=[base_oid_col])
         .set_index(base_oid_col)["Order_Date_dt"]
     )
     p_rev_all["_created_order_dt"] = p_rev_all["_base_oid"].map(ord_dt_map_shp)
+    p_rev_all["Order_Created_Date"] = p_rev_all["_created_order_dt"].dt.strftime(
+        "%Y-%m-%d"
+    )
 
     if rev_status_col:
       rev_st_upper = (
@@ -4033,13 +4051,28 @@ def render_shopify_page():
       _html("</div>")
 
     st.markdown(
-        "#### 🔄 Reverse Logistics Table (Created Orders — Active:"
+        "#### 🔄 Exchanges Detail (Fact_Reverse_Logistics — Active:"
         f" {exch_cnt:,} | Cancelled: {canc_exch_cnt:,})"
     )
     if not p_rev_all.empty:
-      rev_show_cols = [
-          c for c in p_rev_all.columns if not c.startswith("_")
+      prio_rev_cols = [
+          c
+          for c in [
+              "Order_Created_Date",
+              "Base_Order_ID",
+              "Order_ID",
+              "Pickup_Date",
+              "Reverse_Status",
+              "Amount",
+          ]
+          if c in p_rev_all.columns
       ]
+      other_rev_cols = [
+          c
+          for c in p_rev_all.columns
+          if c not in prio_rev_cols and not c.startswith("_")
+      ]
+      rev_show_cols = prio_rev_cols + other_rev_cols
       _safe_dataframe(
           p_rev_all[rev_show_cols],
           use_container_width=True,
@@ -4400,7 +4433,7 @@ def render_shopify_forecast_page():
 
   max_dt = orders_clean["_dt"].max().date()
   min_dt = orders_clean["_dt"].min().date()
-  latest_end_fc = _resolve_default_latest_date(min_dt, max_d := max_dt)
+  latest_end_fc = _resolve_default_latest_date(min_dt, max_dt)
   july_candidate = datetime.date(latest_end_fc.year, 7, 1)
   if july_candidate > latest_end_fc:
     july_candidate = datetime.date(latest_end_fc.year - 1, 7, 1)
