@@ -1796,7 +1796,7 @@ with top_nav2:
 
 
 # ==============================================================================
-# 6. PAGE 1: DAILY ANALYSIS (WITH DAILY RTO STATUS & EXCHANGE STATUS + EXCEL)
+# 6. PAGE 1: DAILY ANALYSIS (CREATED ORDER_ID SCOPE + DELHIVERY VS DTDC FIX)
 # ==============================================================================
 def render_daily_page():
   if model_src is None:
@@ -1824,7 +1824,7 @@ def render_daily_page():
     _html("""
         <div class="main-banner">
             <div class="main-h1">Arth life Daily Analysis</div>
-            <div class="main-sub">Particular Date KPIs + Rolling 7-Day Trend, Daily RTO Status & Daily Exchange Status</div>
+            <div class="main-sub">Particular Date KPIs + Rolling 7-Day Trend (Scoped to Created Order_IDs), Daily RTO & Exchange Status</div>
         </div>
         """)
   with b2:
@@ -1842,6 +1842,7 @@ def render_daily_page():
   prev_date = selected_date - datetime.timedelta(days=1)
 
   f_orders = df_orders.copy()
+  f_orders["Base_Order_ID"] = f_orders["Base_Order_ID"].astype(str).str.strip()
   f_orders["_ord_d"] = f_orders["Order_Date_dt"].dt.date
   f_orders["_ym"] = f_orders["Order_Date_dt"].dt.to_period("M").astype(str)
 
@@ -1851,35 +1852,69 @@ def render_daily_page():
   valid_orders = f_orders[~fin_low.isin(["voided", "cancelled"])].copy()
   dax_orders = f_orders[~fin_low.isin(["voided", "cancelled", "refunded"])].copy()
 
-  f_disp = df_disp[
-      df_disp["Base_Order_ID"].isin(set(f_orders["Base_Order_ID"]))
+  # Orders created within the 7-day window (and up to selected_date)
+  win_7d_orders = valid_orders[
+      (valid_orders["_ord_d"] >= start_7d)
+      & (valid_orders["_ord_d"] <= selected_date)
   ].copy()
-  f_disp["_disp_d"] = f_disp["Dispatch_Date_dt"].dt.date
-  stat_str = f_disp["Shipment_Status"].fillna("").astype(str).str.strip()
+  win_7d_oids = set(win_7d_orders["Base_Order_ID"].dropna().astype(str))
+
+  df_disp_c = df_disp.copy()
+  df_disp_c["Base_Order_ID"] = (
+      df_disp_c["Base_Order_ID"].astype(str).str.strip()
+  )
+  if "Dispatch_Date_dt" in df_disp_c.columns:
+    df_disp_c["_disp_d"] = df_disp_c["Dispatch_Date_dt"].dt.date
+  else:
+    df_disp_c["_disp_d"] = pd.NaT
+
+  # Normalize carrier column (check Dispatch_Category first, fallback to Carrier)
+  car_col = _find_col(df_disp_c, ["Dispatch_Category", "Carrier"])
+  if car_col:
+    car_low = df_disp_c[car_col].fillna("").astype(str).str.strip().str.lower()
+    df_disp_c["_carrier_norm"] = np.where(
+        car_low.str.contains("delhivery", na=False),
+        "Delhivery",
+        np.where(
+            car_low.str.contains("dtdc", na=False),
+            "DTDC",
+            df_disp_c[car_col].fillna("Other").astype(str).str.strip(),
+        ),
+    )
+  else:
+    df_disp_c["_carrier_norm"] = "Other"
+
+  # Consider only dispatches for Order_IDs created in the 7-day window
+  f_disp = df_disp_c[df_disp_c["Base_Order_ID"].isin(win_7d_oids)].copy()
+  stat_str = (
+      f_disp["Shipment_Status"].fillna("").astype(str).str.strip()
+      if "Shipment_Status" in f_disp.columns
+      else pd.Series([""] * len(f_disp), index=f_disp.index)
+  )
   valid_disp = f_disp[
       ~stat_str.isin(["CANCELLED", "Stop Booking/Delivery"])
   ].copy()
 
-  if not df_rev.empty and "Base_Order_ID" in df_rev.columns:
-    f_rev = df_rev[
-        df_rev["Base_Order_ID"].isin(set(f_orders["Base_Order_ID"]))
-    ].copy()
-    if "Pickup_Date_dt" in f_rev.columns and f_rev["Pickup_Date_dt"].notna().any():
-      f_rev["_rev_d"] = f_rev["Pickup_Date_dt"].dt.date
-    else:
-      ord_date_map = (
-          f_orders.dropna(subset=["_ord_d"])
+  # Reverse / Exchange rows strictly for Order_IDs created in the 7-day window
+  f_rev_id_col = None
+  if not df_rev.empty:
+    rev_c = df_rev.copy()
+    rev_base = _find_col(rev_c, ["Base_Order_ID", "Order_ID"])
+    if rev_base:
+      rev_c["_base_oid"] = rev_c[rev_base].astype(str).str.strip()
+      f_rev = rev_c[rev_c["_base_oid"].isin(win_7d_oids)].copy()
+      f_rev_id_col = "_base_oid"
+      # Map Order_Date from created orders so counts align with created order date
+      ord_dt_map = (
+          win_7d_orders.dropna(subset=["_ord_d"])
           .drop_duplicates("Base_Order_ID")
           .set_index("Base_Order_ID")["_ord_d"]
       )
-      f_rev["_rev_d"] = f_rev["Base_Order_ID"].map(ord_date_map)
+      f_rev["_rev_d"] = f_rev["_base_oid"].map(ord_dt_map)
+    else:
+      f_rev = pd.DataFrame(columns=["_base_oid", "_rev_d"])
   else:
-    f_rev = pd.DataFrame(columns=["Base_Order_ID", "_rev_d"])
-  f_rev_id_col = (
-      _find_col(f_rev, ["Base_Order_ID", "Order_ID"])
-      if not f_rev.empty
-      else None
-  )
+    f_rev = pd.DataFrame(columns=["_base_oid", "_rev_d"])
 
   latest_ym_val = f_orders[f_orders["_ord_d"] <= selected_date]["_ym"].dropna().max()
   if pd.isna(latest_ym_val) or not latest_ym_val:
@@ -1893,7 +1928,8 @@ def render_daily_page():
   latest_month_unful_cnt = int(len(latest_month_unful_df))
 
   day_ord = valid_orders[valid_orders["_ord_d"] == selected_date]
-  ord_day_cnt = len(set(day_ord["Base_Order_ID"].dropna().astype(str)))
+  day_oids = set(day_ord["Base_Order_ID"].dropna().astype(str))
+  ord_day_cnt = len(day_oids)
   ord_prev_cnt = len(
       set(
           valid_orders[valid_orders["_ord_d"] == prev_date]["Base_Order_ID"]
@@ -1959,28 +1995,44 @@ def render_daily_page():
   )
   unful_diff = unful_day_cnt - unful_prev_cnt
 
+  # Dispatched count for orders created on selected_date
   disp_day_cnt = len(
       set(
-          valid_disp[valid_disp["_disp_d"] == selected_date]["Base_Order_ID"]
+          valid_disp[valid_disp["Base_Order_ID"].isin(day_oids)]["Base_Order_ID"]
           .dropna()
           .astype(str)
       )
   )
+  prev_oids = set(
+      valid_orders[valid_orders["_ord_d"] == prev_date]["Base_Order_ID"]
+      .dropna()
+      .astype(str)
+  )
   disp_prev_cnt = len(
       set(
-          valid_disp[valid_disp["_disp_d"] == prev_date]["Base_Order_ID"]
+          valid_disp[valid_disp["Base_Order_ID"].isin(prev_oids)]["Base_Order_ID"]
           .dropna()
           .astype(str)
       )
   )
   disp_diff = disp_day_cnt - disp_prev_cnt
 
-  disp_up_to_eff = set(
-      valid_disp[valid_disp["_disp_d"] <= selected_date]["Base_Order_ID"]
+  all_valid_disp_oids = set(
+      df_disp_c[
+          ~df_disp_c["Shipment_Status"]
+          .fillna("")
+          .astype(str)
+          .str.strip()
+          .isin(["CANCELLED", "Stop Booking/Delivery"])
+      ]["Base_Order_ID"]
       .dropna()
       .astype(str)
   )
-  rto_mask = f_disp["Is_RTO"].astype(bool) | stat_str.isin([
+  rto_mask = (
+      f_disp["Is_RTO"].astype(bool)
+      if "Is_RTO" in f_disp.columns
+      else pd.Series([False] * len(f_disp), index=f_disp.index)
+  ) | stat_str.isin([
       "RETURNED_TO_ORIGIN",
       "RETURNING_TO_ORIGIN",
       "RTO Delivered",
@@ -2011,20 +2063,17 @@ def render_daily_page():
     )
     cod_k = max(0, ord_k - pre_k)
 
-    ddf_k = valid_disp[valid_disp["_disp_d"] == d_k]
+    # Dispatches belonging to Order_IDs created on d_k
+    ddf_k = valid_disp[valid_disp["Base_Order_ID"].isin(oids_k)]
     dp_k = len(set(ddf_k["Base_Order_ID"].dropna().astype(str)))
-    delh_k = (
-        int((ddf_k["Dispatch_Category"] == "Delhivery").sum())
-        if "Dispatch_Category" in ddf_k.columns
-        else 0
+    delh_k = int(
+        ddf_k[ddf_k["_carrier_norm"] == "Delhivery"]["Base_Order_ID"].nunique()
     )
-    dtdc_k = (
-        int((ddf_k["Dispatch_Category"] == "DTDC").sum())
-        if "Dispatch_Category" in ddf_k.columns
-        else 0
+    dtdc_k = int(
+        ddf_k[ddf_k["_carrier_norm"] == "DTDC"]["Base_Order_ID"].nunique()
     )
 
-    undisp_k = len(oids_k - disp_up_to_eff)
+    undisp_k = len(oids_k - all_valid_disp_oids)
     ful_k = len(
         set(
             odf_k[
@@ -2055,11 +2104,15 @@ def render_daily_page():
     )
 
     rto_k = int(
-        f_disp[(f_disp["_disp_d"] == d_k) & rto_mask]["Base_Order_ID"].nunique()
+        f_disp[f_disp["Base_Order_ID"].isin(oids_k) & rto_mask][
+            "Base_Order_ID"
+        ].nunique()
     )
     ex_k = (
-        int(f_rev[f_rev["_rev_d"] == d_k][f_rev_id_col].nunique())
-        if (not f_rev.empty and "_rev_d" in f_rev.columns and f_rev_id_col)
+        int(
+            f_rev[f_rev[f_rev_id_col].isin(oids_k)][f_rev_id_col].nunique()
+        )
+        if (not f_rev.empty and f_rev_id_col)
         else 0
     )
 
@@ -2390,7 +2443,7 @@ def render_daily_page():
             y=df_7d["Delhivery"],
             name="Delhivery",
             marker=dict(color="#0EA5E9", cornerradius=5),
-            text=df_7d["Delhivery"],
+            text=[str(v) if v > 0 else "" for v in df_7d["Delhivery"]],
             textposition="inside",
         )
     )
@@ -2400,7 +2453,7 @@ def render_daily_page():
             y=df_7d["DTDC"],
             name="DTDC",
             marker=dict(color="#8B5CF6", cornerradius=5),
-            text=df_7d["DTDC"],
+            text=[str(v) if v > 0 else "" for v in df_7d["DTDC"]],
             textposition="inside",
         )
     )
@@ -2413,7 +2466,7 @@ def render_daily_page():
     fig_car.update_layout(barmode="stack")
     st.plotly_chart(fig_car, use_container_width=True)
     _html(
-        f'<div class="viz-info"><b>7D Carrier Parcels:</b> Delhivery:'
+        f'<div class="viz-info"><b>7D Carrier Orders:</b> Delhivery:'
         f" <b>{tot_7d_delh:,}</b> | DTDC:"
         f" <b>{tot_7d_dtdc:,}</b>.</div></div>"
     )
@@ -2534,7 +2587,7 @@ def render_daily_page():
     fig_ex.update_yaxes(range=[0, max(df_7d["Exchange"].max(), 1) * 1.36])
     st.plotly_chart(fig_ex, use_container_width=True)
     _html(
-        f'<div class="viz-info"><b>7D Exchange Pickups:</b>'
+        f'<div class="viz-info"><b>7D Exchange Orders:</b>'
         f" <b>{tot_7d_ex:,}</b></div></div>"
     )
 
@@ -2559,7 +2612,11 @@ def render_daily_page():
         '<div class="viz-card"><div class="viz-heading">🚚 Daily RTO Status'
         " Breakdown (7 Days)</div>"
     )
-    rto_7d_df = f_disp[f_disp["_disp_d"].isin(dates_7d) & rto_mask].copy()
+    rto_7d_df = f_disp[rto_mask].copy()
+    rto_7d_df["_plot_d"] = rto_7d_df["Base_Order_ID"].map(
+        win_7d_orders.drop_duplicates("Base_Order_ID")
+        .set_index("Base_Order_ID")["_ord_d"]
+    )
     st_col_d = (
         _find_col(rto_7d_df, ["Shipment_Status", "Status"])
         if not rto_7d_df.empty
@@ -2581,7 +2638,7 @@ def render_daily_page():
           columns=sorted(rto_7d_df["_rto_st"].unique().tolist()),
       )
       for d_k, d_lbl in zip(dates_7d, date_lbls_7d):
-        sub_d = rto_7d_df[rto_7d_df["_disp_d"] == d_k]
+        sub_d = rto_7d_df[rto_7d_df["_plot_d"] == d_k]
         if not sub_d.empty:
           vc = sub_d.groupby("_rto_st")["Base_Order_ID"].nunique()
           for k_st, v_cnt in vc.items():
@@ -2634,7 +2691,7 @@ def render_daily_page():
           by="Dispatch_Date_dt", ascending=False
       )[rto_full_cols if rto_full_cols else rto_7d_df.columns.tolist()]
       rto_sum_df = rto_st_piv.reset_index().rename(
-          columns={"index": "Dispatch_Date"}
+          columns={"index": "Order_Date"}
       )
       rto_sum_df["Total_RTO_Orders"] = rto_st_piv.sum(axis=1).values
 
@@ -2654,12 +2711,12 @@ def render_daily_page():
       _html(
           f'<div class="viz-info"><b>7D RTO Full Records:</b>'
           f" <b>{len(rto_full_view):,}</b> rows"
-          f" ({int(rto_st_piv.values.sum()):,} unique orders) across"
-          f" <b>{len(rto_st_piv.columns)}</b> status(es).</div>"
+          f" ({int(rto_7d_df['Base_Order_ID'].nunique()):,} unique created orders)"
+          f" across <b>{len(rto_st_piv.columns)}</b> status(es).</div>"
       )
     else:
       empty_rto_df = pd.DataFrame(
-          {"Dispatch_Date": date_lbls_7d, "RTO_Orders": [0] * 7}
+          {"Order_Date": date_lbls_7d, "RTO_Orders": [0] * 7}
       )
       st.download_button(
           label="📊 Download Full RTO Status Data (Excel)",
@@ -2692,12 +2749,7 @@ def render_daily_page():
         if not ex_7d_df.empty
         else None
     )
-    ex_id_col = (
-        _find_col(ex_7d_df, ["Base_Order_ID", "Order_ID"])
-        if not ex_7d_df.empty
-        else None
-    )
-    if not ex_7d_df.empty:
+    if not ex_7d_df.empty and f_rev_id_col:
       ex_7d_df["_ex_st"] = (
           ex_7d_df[ex_st_col]
           .fillna("Exchange")
@@ -2715,11 +2767,7 @@ def render_daily_page():
       for d_k, d_lbl in zip(dates_7d, date_lbls_7d):
         sub_e = ex_7d_df[ex_7d_df["_rev_d"] == d_k]
         if not sub_e.empty:
-          vc_e = (
-              sub_e.groupby("_ex_st")[ex_id_col].nunique()
-              if ex_id_col
-              else sub_e.groupby("_ex_st").size()
-          )
+          vc_e = sub_e.groupby("_ex_st")[f_rev_id_col].nunique()
           for k_st, v_cnt in vc_e.items():
             ex_st_piv.loc[d_lbl, k_st] = int(v_cnt)
 
@@ -2764,7 +2812,7 @@ def render_daily_page():
           else ex_7d_df[ex_full_cols]
       )
       ex_sum_df = ex_st_piv.reset_index().rename(
-          columns={"index": "Pickup_Date"}
+          columns={"index": "Order_Date"}
       )
       ex_sum_df["Total_Exchange_Orders"] = ex_st_piv.sum(axis=1).values
 
@@ -2784,12 +2832,12 @@ def render_daily_page():
       _html(
           f'<div class="viz-info"><b>7D Exchange Full Records:</b>'
           f" <b>{len(ex_full_view):,}</b> rows"
-          f" ({int(ex_st_piv.values.sum()):,} unique orders) across"
-          f" <b>{len(ex_st_piv.columns)}</b> status(es).</div>"
+          f" ({int(ex_7d_df[f_rev_id_col].nunique()):,} unique created orders)"
+          f" across <b>{len(ex_st_piv.columns)}</b> status(es).</div>"
       )
     else:
       empty_ex_df = pd.DataFrame(
-          {"Pickup_Date": date_lbls_7d, "Exchange_Orders": [0] * 7}
+          {"Order_Date": date_lbls_7d, "Exchange_Orders": [0] * 7}
       )
       st.download_button(
           label="📊 Download Full Exchange Status Data (Excel)",
@@ -2801,7 +2849,7 @@ def render_daily_page():
           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
           key="dl_daily_ex_status_empty_xlsx",
       )
-      st.info("No exchange records in the selected 7-day window.")
+      st.info("No exchange records for orders created in the selected 7-day window.")
     _html("</div>")
 
   _html(
@@ -2814,9 +2862,28 @@ def render_daily_page():
         '<div class="viz-card"><div class="viz-heading">RTO Count Analysis'
         " MOM</div>"
     )
-    rto_m = f_disp[rto_mask].copy()
-    rto_m = rto_m[rto_m["Dispatch_Date_dt"].dt.date <= selected_date]
-    rto_m["YM"] = rto_m["Dispatch_Date_dt"].dt.to_period("M")
+    all_valid_oids = set(valid_orders["Base_Order_ID"].dropna().astype(str))
+    ord_ym_map = (
+        valid_orders.dropna(subset=["Order_Date_dt"])
+        .drop_duplicates("Base_Order_ID")
+        .set_index("Base_Order_ID")["Order_Date_dt"]
+        .dt.to_period("M")
+    )
+    rto_all_mask = (
+        df_disp_c["Is_RTO"].astype(bool)
+        if "Is_RTO" in df_disp_c.columns
+        else pd.Series([False] * len(df_disp_c), index=df_disp_c.index)
+    ) | df_disp_c["Shipment_Status"].fillna("").astype(str).str.strip().isin([
+        "RETURNED_TO_ORIGIN",
+        "RETURNING_TO_ORIGIN",
+        "RTO Delivered",
+        "Set RTO",
+    ])
+    rto_m = df_disp_c[
+        df_disp_c["Base_Order_ID"].isin(all_valid_oids) & rto_all_mask
+    ].copy()
+    rto_m["YM"] = rto_m["Base_Order_ID"].map(ord_ym_map)
+    rto_m = rto_m[rto_m["YM"].notna() & (rto_m["YM"].dt.to_timestamp().dt.date <= selected_date)]
     mom_s = rto_m.groupby("YM")["Base_Order_ID"].nunique().tail(5)
     m_lbls = [p.strftime("%b") for p in mom_s.index]
     m_vals = mom_s.values
@@ -2887,7 +2954,7 @@ def render_daily_page():
 
 
 # ==============================================================================
-# 7. PAGE 2: SHOPIFY ANALYSIS (FIXED ACTIVE EXCHANGE DATE & UNIQUE ORDER COUNT)
+# 7. PAGE 2: SHOPIFY ANALYSIS (STRICT CREATED ORDER_ID SCOPE FOR EVERY COUNT)
 # ==============================================================================
 def render_shopify_page():
   if model_src is None:
@@ -2924,7 +2991,7 @@ def render_shopify_page():
             {LOGO_BANNER_HTML}
             <div>
                 <div class="exec-title">ARTH LIFE Kids Fashion — Shopify Analysis</div>
-                <div class="exec-sub">Pure RTO & Cancelled Exchange Returns, Financial KPIs & SKU/Size Return Control</div>
+                <div class="exec-sub">Every Count Scoped to Order_IDs Created in Selected Period • RTO, Exchange, Dispatch & Return Control</div>
             </div>
         </div>
         <div class="exec-pill">📅 Created: {disp_start.strftime('%d %b %Y')} — {disp_end.strftime('%d %b %Y')}</div>
@@ -2986,6 +3053,7 @@ def render_shopify_page():
     st.error("Start Date must be on or before End Date.")
     return
 
+  # 1. Orders created in the selected period
   p_orders = df_orders[
       (df_orders["Order_Date_dt"].dt.date >= start_date)
       & (df_orders["Order_Date_dt"].dt.date <= end_date)
@@ -3003,15 +3071,17 @@ def render_shopify_page():
     p_orders[base_oid_col] = p_orders[base_oid_col].astype(str).str.strip()
   period_ids = set(p_orders[base_oid_col].dropna()) if base_oid_col else set()
 
+  # 2. Dispatches strictly for orders created in this period
   disp_base_col = _find_col(df_disp, ["Base_Order_ID", "Order_ID"])
-  if not df_disp.empty and disp_base_col:
-    df_disp_clean = df_disp.copy()
-    df_disp_clean[disp_base_col] = (
-        df_disp_clean[disp_base_col].astype(str).str.strip()
-    )
-    p_disp = df_disp_clean[df_disp_clean[disp_base_col].isin(period_ids)].copy()
-  else:
-    p_disp = pd.DataFrame()
+  p_disp = (
+      df_disp[
+          df_disp[disp_base_col].astype(str).str.strip().isin(period_ids)
+      ].copy()
+      if (not df_disp.empty and disp_base_col)
+      else pd.DataFrame()
+  )
+  if not p_disp.empty and disp_base_col:
+    p_disp[disp_base_col] = p_disp[disp_base_col].astype(str).str.strip()
 
   if not p_disp.empty and base_oid_col:
     merge_cols = [
@@ -3145,9 +3215,7 @@ def render_shopify_page():
       else set()
   )
 
-  # --------------------------------------------------------------------------
-  # FIXED REVERSE LOGISTICS / EXCHANGE FILTERING & UNIQUE ORDER COUNT
-  # --------------------------------------------------------------------------
+  # 3. Exchanges / Reverse strictly for Order_IDs created in this period
   rev_base_col = (
       _find_col(df_rev, ["Base_Order_ID", "Order_ID"])
       if not df_rev.empty
@@ -3164,34 +3232,15 @@ def render_shopify_page():
   if not df_rev.empty and rev_base_col:
     rev_work = df_rev.copy()
     rev_work["_base_oid"] = rev_work[rev_base_col].astype(str).str.strip()
-    rev_work = rev_work[
-        ~rev_work["_base_oid"].str.lower().isin(["", "nan", "none"])
-    ].copy()
+    p_rev_all = rev_work[rev_work["_base_oid"].isin(period_ids)].copy()
 
-    # Map Order_Date_dt from Dim_Orders as fallback when Pickup_Date_dt is missing
-    ord_dt_lookup = (
-        df_orders.dropna(subset=["Order_Date_dt"])
-        .assign(_b=df_orders["Base_Order_ID"].astype(str).str.strip())
-        .drop_duplicates(subset=["_b"])
-        .set_index("_b")["Order_Date_dt"]
+    # Attach Order_Date_dt from created orders so day-wise exchange chart plots created order date
+    ord_dt_map_shp = (
+        p_orders.dropna(subset=["Order_Date_dt"])
+        .drop_duplicates(subset=[base_oid_col])
+        .set_index(base_oid_col)["Order_Date_dt"]
     )
-    if (
-        "Pickup_Date_dt" in rev_work.columns
-        and rev_work["Pickup_Date_dt"].notna().any()
-    ):
-      rev_work["_rev_eff_dt"] = rev_work["Pickup_Date_dt"].fillna(
-          rev_work["_base_oid"].map(ord_dt_lookup)
-      )
-    else:
-      rev_work["_rev_eff_dt"] = rev_work["_base_oid"].map(ord_dt_lookup)
-
-    # Filter exchanges to the selected start_date..end_date window
-    in_rev_window = (
-        rev_work["_rev_eff_dt"].notna()
-        & (rev_work["_rev_eff_dt"].dt.date >= start_date)
-        & (rev_work["_rev_eff_dt"].dt.date <= end_date)
-    )
-    p_rev_all = rev_work[in_rev_window].copy()
+    p_rev_all["_created_order_dt"] = p_rev_all["_base_oid"].map(ord_dt_map_shp)
 
     if rev_status_col:
       rev_st_upper = (
@@ -3656,8 +3705,8 @@ def render_shopify_page():
 
     _html(f"""
         <div class="sec-header-rto">
-            <div class="sec-title">🚚 Section 1: Pure RTO Analysis (Pure RTO: {pure_rto_cnt:,} | Cancelled Exchanges: {canc_exch_cnt:,} | Total Returns: {tot_ret_cnt:,})</div>
-            <div class="sec-sub">RTO Status Donut, Region & State-wise RTO Returns & Day-Wise RTO Orders Trend</div>
+            <div class="sec-title">🚚 Section 1: Pure RTO Analysis (Created Orders — Pure RTO: {pure_rto_cnt:,} | Cancelled Exchanges: {canc_exch_cnt:,} | Total Returns: {tot_ret_cnt:,})</div>
+            <div class="sec-sub">RTO Status Donut, Region & State-wise RTO Returns & Day-Wise RTO Orders Trend (by Order Created Date)</div>
         </div>
         """)
 
@@ -3784,7 +3833,7 @@ def render_shopify_page():
     with rto_c3:
       _html(
           '<div class="card-box"><div class="card-title">📅 Day-Wise RTO Orders'
-          " Analysis</div>"
+          " Analysis (Created Date)</div>"
       )
       if (
           not rto_df.empty
@@ -3860,8 +3909,8 @@ def render_shopify_page():
     )
     _html(f"""
         <div class="sec-header-exch">
-            <div class="sec-title">🔄 Section 2: Exchange Analysis (All Unique Exchanges: {all_exch_cnt:,} | Active: {exch_cnt:,} | Cancelled: {canc_exch_cnt:,})</div>
-            <div class="sec-sub">Exchanged Status by Reverse_Status, Day-Wise Exchange Orders (by Pickup/Order Date) & Reverse Logistics Table</div>
+            <div class="sec-title">🔄 Section 2: Exchange Analysis (Created Orders — All Unique Exchanges: {all_exch_cnt:,} | Active: {exch_cnt:,} | Cancelled: {canc_exch_cnt:,})</div>
+            <div class="sec-sub">Exchanged Status by Reverse_Status, Day-Wise Exchange Orders (by Order Created Date) & Reverse Logistics Table</div>
         </div>
         """)
 
@@ -3900,30 +3949,30 @@ def render_shopify_page():
         _html(
             f'<div class="viz-info"><b>Exchange Mix:</b> Active'
             f" <b>{exch_cnt:,}</b> vs Cancelled <b>{canc_exch_cnt:,}</b>"
-            f" across {len(ex_st_df)} statuses.</div>"
+            f" across {len(ex_st_df)} statuses (created orders).</div>"
         )
       else:
         st.info(
-            "No Exchange records in Fact_Reverse_Logistics for selected period."
+            "No Exchange records for orders created in selected period."
         )
       _html("</div>")
 
     with ex_c2:
       _html(
           '<div class="card-box"><div class="card-title">📅 Day-Wise Exchange'
-          " Orders Analysis (Unique Orders)</div>"
+          " Orders Analysis (Created Date)</div>"
       )
       if (
           not p_rev_all.empty
-          and "_rev_eff_dt" in p_rev_all.columns
-          and p_rev_all["_rev_eff_dt"].notna().any()
+          and "_created_order_dt" in p_rev_all.columns
+          and p_rev_all["_created_order_dt"].notna().any()
       ):
         d_ex = (
-            p_rev_all.dropna(subset=["_rev_eff_dt"])
-            .groupby(p_rev_all["_rev_eff_dt"].dt.date)["_base_oid"]
+            p_rev_all.dropna(subset=["_created_order_dt"])
+            .groupby(p_rev_all["_created_order_dt"].dt.date)["_base_oid"]
             .nunique()
             .reset_index(name="Exchange_Count")
-            .rename(columns={"_rev_eff_dt": "Order_Date_dt"})
+            .rename(columns={"_created_order_dt": "Order_Date_dt"})
             .sort_values("Order_Date_dt")
         )
         d_ex["Date_Lbl"] = pd.to_datetime(d_ex["Order_Date_dt"]).dt.strftime(
@@ -3984,7 +4033,7 @@ def render_shopify_page():
       _html("</div>")
 
     st.markdown(
-        "#### 🔄 Reverse Logistics Table (Fact_Reverse_Logistics — Active:"
+        "#### 🔄 Reverse Logistics Table (Created Orders — Active:"
         f" {exch_cnt:,} | Cancelled: {canc_exch_cnt:,})"
     )
     if not p_rev_all.empty:
@@ -4005,7 +4054,7 @@ def render_shopify_page():
           key="dl_shp_exch",
       )
     else:
-      st.info("No Exchange records found for the selected date window.")
+      st.info("No Exchange records found for orders created in selected window.")
 
     if not p_disp.empty and disp_base_col:
       prod_col_ctrl = _find_col(
@@ -4351,7 +4400,7 @@ def render_shopify_forecast_page():
 
   max_dt = orders_clean["_dt"].max().date()
   min_dt = orders_clean["_dt"].min().date()
-  latest_end_fc = _resolve_default_latest_date(min_dt, max_dt)
+  latest_end_fc = _resolve_default_latest_date(min_dt, max_d := max_dt)
   july_candidate = datetime.date(latest_end_fc.year, 7, 1)
   if july_candidate > latest_end_fc:
     july_candidate = datetime.date(latest_end_fc.year - 1, 7, 1)
@@ -5143,7 +5192,6 @@ def render_myntra_page():
     return
 
   def _myntra_metrics(sub_df: pd.DataFrame):
-    """Compute unique order counts for RTO, Customer Return, Exchange, Delivered Exchange & Delivered."""
     if sub_df.empty:
       return {
           "tot_ord": 0,
@@ -5203,7 +5251,6 @@ def render_myntra_page():
         else pd.Series([False] * len(sub_df), index=sub_df.index)
     )
 
-    # Mutually exclusive classification: Exchange -> RTO -> Customer Return
     ex_mask = rt_s.str.contains("exchange", na=False) | in_e
     rto_m = (~ex_mask) & (
         rt_s.str.contains("rto", na=False)
@@ -6078,7 +6125,6 @@ def render_nykaa_page():
     return
 
   def _nykaa_metrics(sub_df: pd.DataFrame):
-    """Compute unique order counts for RTO, Customer Return, Exchange, Delivered Exchange & Delivered."""
     if sub_df.empty:
       return {
           "tot_ord": 0,
