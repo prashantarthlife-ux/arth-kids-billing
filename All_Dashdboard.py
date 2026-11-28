@@ -1876,7 +1876,7 @@ def render_daily_page():
   else:
     f_rev = pd.DataFrame(columns=["Base_Order_ID", "_rev_d"])
   f_rev_id_col = (
-      _find_col(f_rev, ["Order_ID", "Base_Order_ID"])
+      _find_col(f_rev, ["Base_Order_ID", "Order_ID"])
       if not f_rev.empty
       else None
   )
@@ -2693,7 +2693,7 @@ def render_daily_page():
         else None
     )
     ex_id_col = (
-        _find_col(ex_7d_df, ["Order_ID", "Base_Order_ID"])
+        _find_col(ex_7d_df, ["Base_Order_ID", "Order_ID"])
         if not ex_7d_df.empty
         else None
     )
@@ -2887,7 +2887,7 @@ def render_daily_page():
 
 
 # ==============================================================================
-# 7. PAGE 2: SHOPIFY ANALYSIS (BANNER ON TOP + RTO & RETURN CONTROL AT BOTTOM)
+# 7. PAGE 2: SHOPIFY ANALYSIS (FIXED ACTIVE EXCHANGE DATE & UNIQUE ORDER COUNT)
 # ==============================================================================
 def render_shopify_page():
   if model_src is None:
@@ -2999,14 +2999,19 @@ def render_shopify_page():
     ].copy()
 
   base_oid_col = _find_col(p_orders, ["Base_Order_ID", "Order_ID", "Name"])
+  if base_oid_col:
+    p_orders[base_oid_col] = p_orders[base_oid_col].astype(str).str.strip()
   period_ids = set(p_orders[base_oid_col].dropna()) if base_oid_col else set()
 
   disp_base_col = _find_col(df_disp, ["Base_Order_ID", "Order_ID"])
-  p_disp = (
-      df_disp[df_disp[disp_base_col].isin(period_ids)].copy()
-      if (not df_disp.empty and disp_base_col)
-      else pd.DataFrame()
-  )
+  if not df_disp.empty and disp_base_col:
+    df_disp_clean = df_disp.copy()
+    df_disp_clean[disp_base_col] = (
+        df_disp_clean[disp_base_col].astype(str).str.strip()
+    )
+    p_disp = df_disp_clean[df_disp_clean[disp_base_col].isin(period_ids)].copy()
+  else:
+    p_disp = pd.DataFrame()
 
   if not p_disp.empty and base_oid_col:
     merge_cols = [
@@ -3140,13 +3145,11 @@ def render_shopify_page():
       else set()
   )
 
+  # --------------------------------------------------------------------------
+  # FIXED REVERSE LOGISTICS / EXCHANGE FILTERING & UNIQUE ORDER COUNT
+  # --------------------------------------------------------------------------
   rev_base_col = (
       _find_col(df_rev, ["Base_Order_ID", "Order_ID"])
-      if not df_rev.empty
-      else None
-  )
-  rev_order_id_col = (
-      _find_col(df_rev, ["Order_ID", "Base_Order_ID"])
       if not df_rev.empty
       else None
   )
@@ -3159,13 +3162,48 @@ def render_shopify_page():
   )
 
   if not df_rev.empty and rev_base_col:
-    p_rev_all = df_rev[df_rev[rev_base_col].isin(period_ids)].copy()
+    rev_work = df_rev.copy()
+    rev_work["_base_oid"] = rev_work[rev_base_col].astype(str).str.strip()
+    rev_work = rev_work[
+        ~rev_work["_base_oid"].str.lower().isin(["", "nan", "none"])
+    ].copy()
+
+    # Map Order_Date_dt from Dim_Orders as fallback when Pickup_Date_dt is missing
+    ord_dt_lookup = (
+        df_orders.dropna(subset=["Order_Date_dt"])
+        .assign(_b=df_orders["Base_Order_ID"].astype(str).str.strip())
+        .drop_duplicates(subset=["_b"])
+        .set_index("_b")["Order_Date_dt"]
+    )
+    if (
+        "Pickup_Date_dt" in rev_work.columns
+        and rev_work["Pickup_Date_dt"].notna().any()
+    ):
+      rev_work["_rev_eff_dt"] = rev_work["Pickup_Date_dt"].fillna(
+          rev_work["_base_oid"].map(ord_dt_lookup)
+      )
+    else:
+      rev_work["_rev_eff_dt"] = rev_work["_base_oid"].map(ord_dt_lookup)
+
+    # Filter exchanges to the selected start_date..end_date window
+    in_rev_window = (
+        rev_work["_rev_eff_dt"].notna()
+        & (rev_work["_rev_eff_dt"].dt.date >= start_date)
+        & (rev_work["_rev_eff_dt"].dt.date <= end_date)
+    )
+    p_rev_all = rev_work[in_rev_window].copy()
+
     if rev_status_col:
       rev_st_upper = (
-          p_rev_all[rev_status_col].fillna("").astype(str).str.strip().str.upper()
+          p_rev_all[rev_status_col]
+          .fillna("")
+          .astype(str)
+          .str.strip()
+          .str.upper()
       )
-      p_rev_active = p_rev_all[rev_st_upper != "CANCELLED"].copy()
-      p_rev_cancelled = p_rev_all[rev_st_upper == "CANCELLED"].copy()
+      cancelled_tokens = {"CANCELLED", "CANCELED", "VOID"}
+      p_rev_active = p_rev_all[~rev_st_upper.isin(cancelled_tokens)].copy()
+      p_rev_cancelled = p_rev_all[rev_st_upper.isin(cancelled_tokens)].copy()
     else:
       p_rev_active = p_rev_all.copy()
       p_rev_cancelled = pd.DataFrame(columns=p_rev_all.columns)
@@ -3198,17 +3236,16 @@ def render_shopify_page():
   )
 
   pure_rto_cnt = len(rto_all_oids)
-  if not p_rev_cancelled.empty and rev_order_id_col:
-    canc_exch_cnt = int(p_rev_cancelled[rev_order_id_col].nunique())
-  elif not p_rev_cancelled.empty and rev_base_col:
-    canc_exch_cnt = int(p_rev_cancelled[rev_base_col].nunique())
-  else:
-    canc_exch_cnt = len(p_rev_cancelled)
-
-  if not p_rev_active.empty and rev_order_id_col:
-    exch_cnt = int(p_rev_active[rev_order_id_col].nunique())
-  else:
-    exch_cnt = len(p_rev_active)
+  canc_exch_cnt = (
+      int(p_rev_cancelled["_base_oid"].nunique())
+      if (not p_rev_cancelled.empty and "_base_oid" in p_rev_cancelled.columns)
+      else 0
+  )
+  exch_cnt = (
+      int(p_rev_active["_base_oid"].nunique())
+      if (not p_rev_active.empty and "_base_oid" in p_rev_active.columns)
+      else 0
+  )
 
   tot_ret_cnt = pure_rto_cnt + canc_exch_cnt
   disp_cnt = len(dispatched_ids)
@@ -3216,8 +3253,8 @@ def render_shopify_page():
 
   rto_order_ids_set = set(rto_all_oids)
   canc_exch_order_ids_set = (
-      set(p_rev_cancelled[rev_base_col].dropna())
-      if (not p_rev_cancelled.empty and rev_base_col)
+      set(p_rev_cancelled["_base_oid"].dropna())
+      if (not p_rev_cancelled.empty and "_base_oid" in p_rev_cancelled.columns)
       else set()
   )
   all_affected_ret_oids = rto_order_ids_set.union(canc_exch_order_ids_set)
@@ -3817,18 +3854,14 @@ def render_shopify_page():
       _html("</div>")
 
     all_exch_cnt = (
-        int(
-            p_rev_all[
-                rev_order_id_col if rev_order_id_col else rev_base_col
-            ].nunique()
-        )
-        if not p_rev_all.empty
+        int(p_rev_all["_base_oid"].nunique())
+        if (not p_rev_all.empty and "_base_oid" in p_rev_all.columns)
         else 0
     )
     _html(f"""
         <div class="sec-header-exch">
-            <div class="sec-title">🔄 Section 2: Exchange Analysis (All Exchanges: {all_exch_cnt:,} | Active: {exch_cnt:,} | Cancelled: {canc_exch_cnt:,})</div>
-            <div class="sec-sub">Exchanged Status by Reverse_Status, Day-Wise Exchange Orders (All Exchanges incl. Cancelled) & Reverse Logistics Table</div>
+            <div class="sec-title">🔄 Section 2: Exchange Analysis (All Unique Exchanges: {all_exch_cnt:,} | Active: {exch_cnt:,} | Cancelled: {canc_exch_cnt:,})</div>
+            <div class="sec-sub">Exchanged Status by Reverse_Status, Day-Wise Exchange Orders (by Pickup/Order Date) & Reverse Logistics Table</div>
         </div>
         """)
 
@@ -3836,39 +3869,30 @@ def render_shopify_page():
     with ex_c1:
       _html(
           '<div class="card-box"><div class="card-title">🍩 Exchange Status'
-          " by Reverse_Status (Donut)</div>"
+          " by Reverse_Status (Unique Orders)</div>"
       )
-      if not p_rev_all.empty:
-        id_for_cnt = rev_order_id_col if rev_order_id_col else rev_base_col
-        if rev_status_col and id_for_cnt:
+      if not p_rev_all.empty and "_base_oid" in p_rev_all.columns:
+        if rev_status_col:
           ex_st_df = (
               p_rev_all.groupby(
                   p_rev_all[rev_status_col].fillna("Unknown").astype(str).str.strip()
-              )[id_for_cnt]
+              )["_base_oid"]
               .nunique()
               .reset_index(name="Count")
           )
           ex_st_df.columns = ["Reverse_Status", "Count"]
-        elif rev_status_col:
-          ex_st_df = (
-              p_rev_all.groupby(
-                  p_rev_all[rev_status_col].fillna("Unknown").astype(str).str.strip()
-              )
-              .size()
-              .reset_index(name="Count")
-          )
-          ex_st_df.columns = ["Reverse_Status", "Count"]
         else:
-          ex_st_df = pd.DataFrame(
-              {"Reverse_Status": ["Recorded"], "Count": [len(p_rev_all)]}
-          )
+          ex_st_df = pd.DataFrame({
+              "Reverse_Status": ["Recorded"],
+              "Count": [int(p_rev_all["_base_oid"].nunique())],
+          })
         ex_st_df = ex_st_df[ex_st_df["Count"] > 0]
         st.plotly_chart(
             _make_donut_fig(
                 ex_st_df["Reverse_Status"].tolist(),
                 ex_st_df["Count"].tolist(),
                 ["#10B981", "#8B5CF6", "#F59E0B", "#0EA5E9", "#EF4444", "#EC4899"],
-                f"<b>{int(ex_st_df['Count'].sum()):,}</b><br>Total Exch",
+                f"<b>{all_exch_cnt:,}</b><br>Total Exch",
             ),
             use_container_width=True,
             key="shp_s2_ex_donut",
@@ -3887,94 +3911,74 @@ def render_shopify_page():
     with ex_c2:
       _html(
           '<div class="card-box"><div class="card-title">📅 Day-Wise Exchange'
-          " Orders Analysis (All Exchanges)</div>"
+          " Orders Analysis (Unique Orders)</div>"
       )
-      if not p_rev_all.empty and rev_base_col:
-        rev_d = p_rev_all.merge(
-            p_orders_uniq[[base_oid_col, "Order_Date_dt"]],
-            left_on=rev_base_col,
-            right_on=base_oid_col,
-            how="left",
+      if (
+          not p_rev_all.empty
+          and "_rev_eff_dt" in p_rev_all.columns
+          and p_rev_all["_rev_eff_dt"].notna().any()
+      ):
+        d_ex = (
+            p_rev_all.dropna(subset=["_rev_eff_dt"])
+            .groupby(p_rev_all["_rev_eff_dt"].dt.date)["_base_oid"]
+            .nunique()
+            .reset_index(name="Exchange_Count")
+            .rename(columns={"_rev_eff_dt": "Order_Date_dt"})
+            .sort_values("Order_Date_dt")
         )
-        id_for_day = (
-            rev_order_id_col
-            if (rev_order_id_col and rev_order_id_col in rev_d.columns)
-            else rev_base_col
+        d_ex["Date_Lbl"] = pd.to_datetime(d_ex["Order_Date_dt"]).dt.strftime(
+            "%d %b"
         )
-        if (
-            "Pickup_Date_dt" in rev_d.columns
-            and rev_d["Pickup_Date_dt"].notna().any()
-        ):
-          rev_d["_ex_plot_dt"] = rev_d["Pickup_Date_dt"].fillna(
-              rev_d["Order_Date_dt"]
-          )
-        else:
-          rev_d["_ex_plot_dt"] = rev_d["Order_Date_dt"]
-
-        if rev_d["_ex_plot_dt"].notna().any():
-          d_ex = (
-              rev_d.dropna(subset=["_ex_plot_dt"])
-              .groupby(rev_d["_ex_plot_dt"].dt.date)[id_for_day]
-              .nunique()
-              .reset_index(name="Exchange_Count")
-              .rename(columns={"_ex_plot_dt": "Order_Date_dt"})
-              .sort_values("Order_Date_dt")
-          )
-          d_ex["Date_Lbl"] = pd.to_datetime(d_ex["Order_Date_dt"]).dt.strftime(
-              "%d %b"
-          )
-          fig_d_ex = go.Figure()
-          fig_d_ex.add_trace(
-              go.Bar(
-                  x=d_ex["Date_Lbl"],
-                  y=d_ex["Exchange_Count"],
-                  name="Day-Wise Exchanges (All)",
-                  marker=dict(color="#A855F7", cornerradius=6),
-                  text=d_ex["Exchange_Count"],
-                  textposition="outside",
-                  cliponaxis=False,
-              )
-          )
-          fig_d_ex.add_trace(
-              go.Scatter(
-                  x=d_ex["Date_Lbl"],
-                  y=d_ex["Exchange_Count"],
-                  name="Trend",
-                  mode="lines+markers",
-                  fill="tozeroy",
-                  fillcolor="rgba(124, 58, 237, 0.10)",
-                  line=dict(color="#7C3AED", width=2.6, shape="spline"),
-                  marker=dict(
-                      size=6.5,
-                      color="#FFFFFF",
-                      line=dict(color="#7C3AED", width=2),
-                  ),
-              )
-          )
-          _style_fig(
-              fig_d_ex,
-              height=370,
-              margins=dict(l=15, r=15, t=25, b=55),
-              showlegend=False,
-              hovermode="x unified",
-          )
-          fig_d_ex.update_xaxes(tickangle=-45, nticks=18)
-          fig_d_ex.update_yaxes(
-              range=[0, max(float(d_ex["Exchange_Count"].max()) * 1.32, 3.0)]
-          )
-          st.plotly_chart(
-              fig_d_ex, use_container_width=True, key="shp_s2_day_ex"
-          )
-          peak_ex_row = d_ex.loc[d_ex["Exchange_Count"].idxmax()]
-          _html(
-              '<div class="viz-info"><b>Peak Exchange Day (All):</b>'
-              f' <b>{peak_ex_row["Date_Lbl"]}</b>'
-              f' ({int(peak_ex_row["Exchange_Count"]):,}) · Total:'
-              f' <b>{int(d_ex["Exchange_Count"].sum()):,}</b> · Avg:'
-              f' <b>{d_ex["Exchange_Count"].mean():.1f}/day</b>.</div>'
-          )
-        else:
-          st.info("No dated exchange records in selected period.")
+        fig_d_ex = go.Figure()
+        fig_d_ex.add_trace(
+            go.Bar(
+                x=d_ex["Date_Lbl"],
+                y=d_ex["Exchange_Count"],
+                name="Day-Wise Exchanges",
+                marker=dict(color="#A855F7", cornerradius=6),
+                text=d_ex["Exchange_Count"],
+                textposition="outside",
+                cliponaxis=False,
+            )
+        )
+        fig_d_ex.add_trace(
+            go.Scatter(
+                x=d_ex["Date_Lbl"],
+                y=d_ex["Exchange_Count"],
+                name="Trend",
+                mode="lines+markers",
+                fill="tozeroy",
+                fillcolor="rgba(124, 58, 237, 0.10)",
+                line=dict(color="#7C3AED", width=2.6, shape="spline"),
+                marker=dict(
+                    size=6.5,
+                    color="#FFFFFF",
+                    line=dict(color="#7C3AED", width=2),
+                ),
+            )
+        )
+        _style_fig(
+            fig_d_ex,
+            height=370,
+            margins=dict(l=15, r=15, t=25, b=55),
+            showlegend=False,
+            hovermode="x unified",
+        )
+        fig_d_ex.update_xaxes(tickangle=-45, nticks=18)
+        fig_d_ex.update_yaxes(
+            range=[0, max(float(d_ex["Exchange_Count"].max()) * 1.32, 3.0)]
+        )
+        st.plotly_chart(
+            fig_d_ex, use_container_width=True, key="shp_s2_day_ex"
+        )
+        peak_ex_row = d_ex.loc[d_ex["Exchange_Count"].idxmax()]
+        _html(
+            '<div class="viz-info"><b>Peak Exchange Day:</b>'
+            f' <b>{peak_ex_row["Date_Lbl"]}</b>'
+            f' ({int(peak_ex_row["Exchange_Count"]):,}) · Unique Orders:'
+            f' <b>{all_exch_cnt:,}</b> · Avg:'
+            f' <b>{d_ex["Exchange_Count"].mean():.1f}/day</b>.</div>'
+        )
       else:
         st.info("No day-wise exchange data in selected period.")
       _html("</div>")
@@ -3984,20 +3988,24 @@ def render_shopify_page():
         f" {exch_cnt:,} | Cancelled: {canc_exch_cnt:,})"
     )
     if not p_rev_all.empty:
+      rev_show_cols = [
+          c for c in p_rev_all.columns if not c.startswith("_")
+      ]
       _safe_dataframe(
-          p_rev_all, use_container_width=True, height=250, hide_index=True
+          p_rev_all[rev_show_cols],
+          use_container_width=True,
+          height=250,
+          hide_index=True,
       )
       st.download_button(
           "⬇️ Download Reverse Logistics CSV",
-          p_rev_all.to_csv(index=False).encode("utf-8"),
+          p_rev_all[rev_show_cols].to_csv(index=False).encode("utf-8"),
           f"exchanges_{start_date}_{end_date}.csv",
           "text/csv",
           key="dl_shp_exch",
       )
     else:
-      st.info(
-          "No Exchange records found for the selected created orders window."
-      )
+      st.info("No Exchange records found for the selected date window.")
 
     if not p_disp.empty and disp_base_col:
       prod_col_ctrl = _find_col(
@@ -4007,8 +4015,8 @@ def render_shopify_page():
           p_disp, ["Product_Age_Group", "Age_Group", "Size"]
       )
       exch_all_oids = (
-          set(p_rev_all[rev_base_col].dropna())
-          if (not p_rev_all.empty and rev_base_col)
+          set(p_rev_all["_base_oid"].dropna())
+          if (not p_rev_all.empty and "_base_oid" in p_rev_all.columns)
           else set()
       )
 
@@ -5292,7 +5300,6 @@ def render_myntra_page():
       seller_rev, prv_m["gross_rev"], is_currency=True
   )
 
-  # Row 1: Total Orders Created (vs Prev), RTO Count (% + Prev Δ), Customer Return Count (% + Prev Δ), Exchange Count (Prev Δ + Deliv Exch), Gross Revenue (Prev Δ)
   k1, k2, k3, k4, k5 = st.columns(5)
   with k1:
     _html(f"""
@@ -5352,7 +5359,6 @@ def render_myntra_page():
 
   st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
 
-  # Row 2: Order Dispatched, Successfully Delivered (Unique), Return & RTO Deductions, Net Revenue
   s_k1, s_k2, s_k3, s_k4 = st.columns(4)
   with s_k1:
     _html(f"""
